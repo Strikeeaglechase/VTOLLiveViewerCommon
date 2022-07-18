@@ -1,0 +1,23 @@
+{
+	"compilerOptions": {
+		"emitDecoratorMetadata": true,
+		"experimentalDecorators": true,
+		"declaration": true,
+		"declarationMap": true,
+		"target": "ES6",
+		"moduleResolution": "node",
+		"module": "esnext",
+		"allowSyntheticDefaultImports": true,
+		"lib": [
+			"ES2019",
+			"DOM"
+		],
+		"composite": true,
+		"removeComments": false,
+		"outDir": "dist"
+	},
+	"include": [
+		"src/",
+	],
+	"references": []
+}
