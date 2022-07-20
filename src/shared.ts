@@ -203,6 +203,13 @@ class Client {
 			eraseCookie("alpha_key");
 		}
 	}
+
+	@RPC("in")
+	ping(n: number) {
+		this.pong(n);
+	}
+	@RPC("out")
+	pong(n: number) { }
 }
 
 export {
