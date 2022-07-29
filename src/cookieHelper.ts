@@ -1,5 +1,6 @@
 export function setCookie(name: string, value: string) {
-	document.cookie = name + "=" + (value || "") + "; path=/";
+	const never = new Date(2147483647 * 1000).toUTCString();
+	document.cookie = `${name}=${(value || "")}; expires=${never}'; path=/`;
 }
 
 export function getCookie(name: string) {

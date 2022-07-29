@@ -19,6 +19,7 @@
 	"dependencies": {
 		"@types/node": "^17.0.17",
 		"buffer": "^6.0.3",
+		"chalk": "^5.0.1",
 		"lodash": "^4.17.21"
 	}
 }
