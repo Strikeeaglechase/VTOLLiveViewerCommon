@@ -95,6 +95,19 @@ interface MissionInfo {
 	isBuiltin: boolean;
 }
 
+interface RecordedLobbyInfo {
+	lobbyId: string;
+	lobbyName: string;
+	missionName: string;
+	missionId: string;
+	campaignId: string;
+	type: string;
+	map: string;
+	recordingId: string;
+	duration: number;
+	startTime: number;
+}
+
 enum LobbyConnectionStatus {
 	None,
 	Connecting,
@@ -181,6 +194,7 @@ class VTOLLobby {
 
 @EnableRPCs("instance")
 class Client {
+	public expectedReplayChunks = -1;
 	constructor(public id: string) { }
 
 	@RPC("out")
@@ -204,10 +218,20 @@ class Client {
 		}
 	}
 
+	@RPC("out")
+	replayGame(id: string) { }
+
+	@RPC("in")
+	expectChunks(count: number) {
+		this.expectedReplayChunks = count;
+		console.log(`Expecting ${count} chunks for replay`);
+	}
+
 	@RPC("in")
 	ping(n: number) {
 		this.pong(n);
 	}
+
 	@RPC("out")
 	pong(n: number) { }
 }
@@ -226,5 +250,6 @@ export {
 	VTOLLobby,
 	Client,
 	MissionInfo,
-	LobbyConnectionStatus
+	LobbyConnectionStatus,
+	RecordedLobbyInfo
 };

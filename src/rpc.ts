@@ -23,6 +23,7 @@ interface RPCPacket {
 	method: string;
 	args: any;
 	id?: string;
+	timestamp?: number;
 }
 
 type PermissionProvider = (packet: RPCPacket, rpc: RPCHandler, client: unknown) => boolean;
@@ -90,17 +91,12 @@ class RPCController {
 
 					if (mode == "singleInstance") {
 						self.singleInstances[name] = this;
-						// console.log(`Single instance handler ${name} created, with ${self.rpcs.filter(r => r.target == name).length} RPCs`);
 					} else {
 						if (!self.instances[name]) self.instances[name] = [];
 						self.instances[name].push(this);
-						//@ts-ignore
-						// console.log(`New RPC instance ${name}#${this.id} with ${self.rpcs.filter(r => r.target == name).length} RPCs`);
 					}
 				}
 			};
-			// @ts-ignore
-			// constructor.prototype.__name = name;
 		}
 
 		this.newInRpcs.forEach(rpc => {

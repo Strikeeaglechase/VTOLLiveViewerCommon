@@ -4,14 +4,15 @@ import { compressRpcPackets, decompressRpcPackets } from "./compression.js";
 import { RPCPacket } from "./rpc";
 
 const inputPackets: RPCPacket[] = [
-	{ className: "TClass1", method: "method1", args: ["hello", 5, "world", true, null], id: undefined },
-	{ className: "TClass1", method: "method1", args: ["hello", 5, "world", true, null], id: "5" },
-	{ className: "ComplexClass", method: "JsonBody", args: [[[{ hello: "world", this: [{ is: "complex" }] }]]], id: undefined },
-	{ className: "ComplexClass", method: "JsonBody", args: [[[{ hello: "world", this: [{ is: "complex" }] }]]], id: "helloWorld" },
+	{ className: "TClass1", method: "method1", args: ["hello", 5, "world", true, null], id: undefined, timestamp: undefined },
+	{ className: "TClass1", method: "method1", args: ["hello", 5, "world", true, null], id: "5", timestamp: 9999999999999 },
+	{ className: "ComplexClass", method: "JsonBody", args: [[[{ hello: "world", this: [{ is: "complex" }] }]]], id: undefined, timestamp: Date.now() },
+	{ className: "ComplexClass", method: "JsonBody", args: [[[{ hello: "world", this: [{ is: "complex" }] }]]], id: "helloWorld", timestamp: undefined },
 ];
 // Fill the input with a shit load of packets with different strings
 for (let i = 0; i < 300; i++) {
-	inputPackets.push({ className: `TClass${i}`, method: "method1", args: ["hello", 5, "world", true, null], id: i.toString() });
+	const id = (i % 2000).toString();
+	inputPackets.push({ className: `TClass${id}`, method: "method1", args: ["hello", 5, "world", true, null], id: id, timestamp: undefined });
 }
 
 

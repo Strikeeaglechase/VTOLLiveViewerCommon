@@ -1,5 +1,7 @@
 // IMPORTANT: Numbers should be stored as at least 2 byte values, using single bytes has caused a shit load of issues
 
+const VERSION = 1;
+const debug_decompress = false;
 
 import { RPCPacket } from "./rpc.js";
 
@@ -10,6 +12,7 @@ enum PacketFlags {
 	BinBody = 0b00001000,
 	IdIsNumber = 0b00010000,
 	IdIsString = 0b00100000,
+	HasTimestamp = 0b01000000,
 }
 
 enum ArgumentType {
@@ -44,7 +47,18 @@ function bytesToNum(bytes: number[]) {
 	const ui8 = new Uint8Array(bytes);
 	const f32 = new Float32Array(ui8.buffer);
 	return f32[0];
+}
 
+function exactNumToBytes(num: number) {
+	const i32 = new Float64Array(1);
+	i32[0] = num;
+	return new Uint8Array(i32.buffer);
+}
+
+function exactBytesToNum(bytes: number[]) {
+	const ui8 = new Uint8Array(bytes);
+	const i32 = new Float64Array(ui8.buffer);
+	return i32[0];
 }
 
 // If the number is <128 then store as one byte, otherwise two bytes, highest bit is used for indicating if the number is >127
@@ -65,7 +79,6 @@ function decompressInt(readOne: () => number) {
 		return (first & 0x7F) | (second << 7);
 	}
 }
-
 
 function compressArgs(args: unknown[]) {
 	const result: number[] = [];
@@ -133,12 +146,14 @@ function decompressArgs(values: number[]) {
 	return result;
 }
 
+
 function compressRpcPackets(rpcPackets: RPCPacket[]) {
 	const result: number[] = [];
 	// Format
-	// {num strs} {str1len} [str1] {str2len} [str2] ...
+	// {version} {num strs} {str1len} [str1] {str2len} [str2] ...
 	// {num rpc packets} {rpc1 len} [rpc1] {rpc2 len} [rpc2] ...
 
+	result.push(VERSION);
 
 	// Find all strings, store in beginning of packet
 	const strs = new Set<string>();
@@ -160,13 +175,14 @@ function compressRpcPackets(rpcPackets: RPCPacket[]) {
 
 	// Add rpc packets
 	// RPC Packet format: {classNameIdx} {methodNameIdx} {PacketFlags} {idIdx} {arglen} [arg str]
-	result.push(...compressInt(rpcPackets.length));
+	result.push(...exactNumToBytes(rpcPackets.length));
 	rpcPackets.forEach(packet => {
 		const argCompress = allArgsCanCompress(packet.args);
 		const idIsNum = isNum(packet.id);
 		const packetFlags = (packet.id ? PacketFlags.HasId : PacketFlags.NoId) |
 			(argCompress ? PacketFlags.BinBody : PacketFlags.JSONBody) |
-			(idIsNum ? PacketFlags.IdIsNumber : PacketFlags.IdIsString);
+			(idIsNum ? PacketFlags.IdIsNumber : PacketFlags.IdIsString) |
+			(packet.timestamp ? PacketFlags.HasTimestamp : 0);
 
 		result.push(strings.indexOf(packet.className.toString()));
 		result.push(strings.indexOf(packet.method.toString()));
@@ -175,6 +191,7 @@ function compressRpcPackets(rpcPackets: RPCPacket[]) {
 
 		// Should this be done in multiple lines, yes, am I going to? No!
 		if (packet.id) result.push(...(idIsNum ? compressInt(parseInt(packet.id)) : [strings.indexOf(packet.id)]));
+		if (packet.timestamp) result.push(...exactNumToBytes(packet.timestamp));
 
 		if (argCompress) {
 			const args = compressArgs(packet.args);
@@ -190,8 +207,6 @@ function compressRpcPackets(rpcPackets: RPCPacket[]) {
 	return result;
 }
 
-const debug_decompress = false;
-
 function decompressRpcPackets(bytes: number[]) {
 	let idx = 0;
 
@@ -205,6 +220,9 @@ function decompressRpcPackets(bytes: number[]) {
 		return read(1)[0];
 	}
 
+	const version = readOne();
+	if (version != VERSION) throw new Error(`Invalid version for decompress, expected ${VERSION}, got ${version}`);
+
 	const numStrs = decompressInt(readOne);
 	if (debug_decompress) console.log(`Packet has ${numStrs} strings`);
 	const strings = [];
@@ -217,7 +235,7 @@ function decompressRpcPackets(bytes: number[]) {
 
 	// RPC Packet format: {classNameIdx} {methodNameIdx} {hasId} {idIdx} {arglen} [arg str]
 	// Read rpc packets
-	const numRpcPackets = decompressInt(readOne);
+	const numRpcPackets = exactBytesToNum(read(8));
 	const rpcPackets: RPCPacket[] = [];
 	if (debug_decompress) console.log(`Packet has ${numRpcPackets} rpc packets`);
 	for (let i = 0; i < numRpcPackets; i++) {
@@ -229,6 +247,8 @@ function decompressRpcPackets(bytes: number[]) {
 
 		const idIsNum = bitCheck(packetFlags, PacketFlags.IdIsNumber);
 		const hasId = bitCheck(packetFlags, PacketFlags.HasId);
+		const hasTimestamp = bitCheck(packetFlags, PacketFlags.HasTimestamp);
+
 		// const idIdx = bitCheck(packetFlags, PacketFlags.HasId) ? readOne() : undefined;
 		let id: string | undefined = undefined;
 		if (hasId) {
@@ -239,6 +259,9 @@ function decompressRpcPackets(bytes: number[]) {
 			}
 		}
 		if (debug_decompress) console.log(` - ID: ${id}`);
+
+		let timestamp: number | undefined = undefined;
+		if (hasTimestamp) timestamp = exactBytesToNum(read(8));
 
 
 		const argLen = decompressInt(readOne);
@@ -256,12 +279,12 @@ function decompressRpcPackets(bytes: number[]) {
 			className: strings[classNameIdx],
 			method: strings[methodNameIdx],
 			id: id,
-			args
+			timestamp: timestamp,
+			args: args
 		});
 	}
 
 	return rpcPackets;
 }
-
 
 export { compressRpcPackets, decompressRpcPackets };
