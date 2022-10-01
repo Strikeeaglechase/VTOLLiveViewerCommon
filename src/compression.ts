@@ -220,34 +220,53 @@ function decompressRpcPackets(bytes: number[]) {
 		return read(1)[0];
 	}
 
-	const version = readOne();
-	if (version != VERSION) throw new Error(`Invalid version for decompress, expected ${VERSION}, got ${version}`);
+	function peak() {
+		return bytes[idx];
+	}
+
+	let version = peak();
+	if (debug_decompress) console.log(`Version: ${version}`);
+	if (version != VERSION) {
+		console.error(`Invalid version for decompress, expected ${VERSION}, got ${version}`);
+		// Attempt to parse packet without a version
+		version = -1;
+	} else {
+		readOne(); // Remove version from bytes
+	}
 
 	const numStrs = decompressInt(readOne);
-	if (debug_decompress) console.log(`Packet has ${numStrs} strings`);
+	if (debug_decompress) console.log(`Str count: ${numStrs}`);
 	const strings = [];
 	for (let i = 0; i < numStrs; i++) {
 		const strLen = readOne();
 		const str = read(strLen).map(c => String.fromCharCode(c)).join('');
 		strings.push(str);
+		if (debug_decompress) console.log(` #${i} - ${str}`);
 	}
-	if (debug_decompress) console.log(`Packet strings: ${strings.join(', ')}`);
 
 	// RPC Packet format: {classNameIdx} {methodNameIdx} {hasId} {idIdx} {arglen} [arg str]
 	// Read rpc packets
-	const numRpcPackets = exactBytesToNum(read(8));
+	const numRpcPackets = version == -1 ? decompressInt(readOne) : exactBytesToNum(read(8));
 	const rpcPackets: RPCPacket[] = [];
-	if (debug_decompress) console.log(`Packet has ${numRpcPackets} rpc packets`);
+	if (debug_decompress) console.log(`RPC Count: ${numRpcPackets}`);
 	for (let i = 0; i < numRpcPackets; i++) {
 		const classNameIdx = readOne();
 		const methodNameIdx = readOne();
 		const packetFlags = readOne();
 
-		if (debug_decompress) console.log(`Reading packet ${i}: ${strings[classNameIdx]} ${strings[methodNameIdx]} HasID: ${bitCheck(packetFlags, PacketFlags.HasId)} HasBinBody: ${bitCheck(packetFlags, PacketFlags.BinBody)}`);
 
 		const idIsNum = bitCheck(packetFlags, PacketFlags.IdIsNumber);
 		const hasId = bitCheck(packetFlags, PacketFlags.HasId);
 		const hasTimestamp = bitCheck(packetFlags, PacketFlags.HasTimestamp);
+
+		if (debug_decompress) {
+			console.log(`RPC #${i}`);
+			console.log(` - Class: ${classNameIdx} - ${strings[classNameIdx]}`);
+			console.log(` - Method: ${methodNameIdx} - ${strings[methodNameIdx]}`);
+			console.log(` - idIsNum: ${idIsNum}`);
+			console.log(` - hasId: ${hasId}`);
+			console.log(` - hasTimestamp: ${hasTimestamp}`);
+		}
 
 		// const idIdx = bitCheck(packetFlags, PacketFlags.HasId) ? readOne() : undefined;
 		let id: string | undefined = undefined;
@@ -262,7 +281,7 @@ function decompressRpcPackets(bytes: number[]) {
 
 		let timestamp: number | undefined = undefined;
 		if (hasTimestamp) timestamp = exactBytesToNum(read(8));
-
+		if (debug_decompress) console.log(` - Timestamp: ${timestamp}`);
 
 		const argLen = decompressInt(readOne);
 		if (debug_decompress) console.log(` - Arg len: ${argLen}`);

@@ -142,6 +142,7 @@ class VTOLLobby {
 		this.isConnected = isConnected;
 		this.isPrivate = isPrivate;
 		this.players = players.map(p => new Player(p));
+		if (isConnected) console.log(`Update lobby info got ${this.players.length} players`);
 		if (isConnected) this.state = LobbyConnectionStatus.Connected;
 	}
 
