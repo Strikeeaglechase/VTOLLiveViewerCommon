@@ -24,6 +24,7 @@ interface RPCPacket {
 	args: any;
 	id?: string;
 	timestamp?: number;
+	pid?: number;
 }
 
 type PermissionProvider = (packet: RPCPacket, rpc: RPCHandler, client: unknown) => boolean;
@@ -222,16 +223,16 @@ class RPCController {
 		switch (rpc.type) {
 			case "instance": {
 				const instance = this.instance.instances[packet.className]?.find(i => i.id == packet.id);
-				if (!instance) return console.warn(`No existing instance for ${packet.className} (id: ${packet.id})`);
-				if (!instance[packet.method]) return console.warn(`No RPC method ${packet.className}.${packet.method}`);
+				if (!instance) return console.warn(`No existing instance for ${packet.className} (id: ${packet.id})`, packet);
+				if (!instance[packet.method]) return console.warn(`No RPC method ${packet.className}.${packet.method}`, packet);
 				instance[packet.method].apply(instance, packet.args);
 				break;
 			}
 
 			case "singleInstance": {
 				const instance = this.instance.singleInstances[packet.className];
-				if (!instance) return console.warn(`No existing instance for ${packet.className}`);
-				if (!instance[packet.method]) return console.warn(`No RPC method ${packet.className}.${packet.method}`);
+				if (!instance) return console.warn(`No existing instance for ${packet.className}`, packet);
+				if (!instance[packet.method]) return console.warn(`No RPC method ${packet.className}.${packet.method}`, packet);
 				instance[packet.method].apply(instance, packet.args);
 				break;
 			}

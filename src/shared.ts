@@ -69,6 +69,7 @@ interface RPCPacket {
 	args: any[];
 	id?: string;
 	gameId?: string;
+	pid?: number;
 	// type: PacketType.rpcPacket;
 }
 
