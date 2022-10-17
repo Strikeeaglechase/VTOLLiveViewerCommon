@@ -208,6 +208,7 @@ function compressRpcPackets(rpcPackets: RPCPacket[]) {
 }
 
 function decompressRpcPackets(bytes: number[]) {
+	if (bytes.length == 0) return [];
 	let idx = 0;
 
 	function read(amt = 1) {
