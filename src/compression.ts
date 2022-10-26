@@ -326,15 +326,8 @@ function decompressRpcPacketsV1(bytes: number[]) {
 		return bytes[idx];
 	}
 
-	let version = peak();
+	let version = readOne();
 	if (debug_decompress) console.log(`Version: ${version}`);
-	if (version != VERSION) {
-		console.error(`Invalid version for decompress, expected ${VERSION}, got ${version}`);
-		// Attempt to parse packet without a version
-		version = -1;
-	} else {
-		readOne(); // Remove version from bytes
-	}
 
 	const numStrs = decompressInt(readOne);
 	if (debug_decompress) console.log(`Str count: ${numStrs}`);
@@ -426,15 +419,8 @@ function decompressRpcPacketsV2(bytes: number[]) {
 		return bytes[idx];
 	}
 
-	let version = peak();
+	let version = readOne();
 	if (debug_decompress) console.log(`Version: ${version}`);
-	if (version != VERSION) {
-		console.error(`Invalid version for decompress, expected ${VERSION}, got ${version}`);
-		// Attempt to parse packet without a version
-		version = -1;
-	} else {
-		readOne(); // Remove version from bytes
-	}
 
 	const numStrs = decompressInt(readOne);
 	if (debug_decompress) console.log(`Str count: ${numStrs}`);
