@@ -116,6 +116,11 @@ enum LobbyConnectionStatus {
 	Connected,
 }
 
+interface LobbyConnectionResult {
+	status: LobbyConnectionStatus;
+	reason: string;
+}
+
 @EnableRPCs("instance")
 class VTOLLobby {
 	public name = "";
@@ -130,7 +135,7 @@ class VTOLLobby {
 	public mission: MissionInfo | null = null;
 
 	private onMissionInfo: ((mission: MissionInfo) => void) | null;
-	private onConnectionResult: ((state: LobbyConnectionStatus) => void) | null;
+	private onConnectionResult: ((state: LobbyConnectionStatus, reason: string) => void) | null;
 	public onLobbyEnd: (() => void) | null = null;
 	constructor(public id: string) { }
 
@@ -162,13 +167,13 @@ class VTOLLobby {
 	}
 
 	@RPC("in")
-	public ConnectionResult(success: boolean) {
-		console.log(`Connection result: ${success}`);
+	public ConnectionResult(success: boolean, reason: string) {
+		console.log(`Connection result: ${success}, ${reason}`);
 		if (success) this.state = LobbyConnectionStatus.Connected;
 		else this.state = LobbyConnectionStatus.Invalid;
 
 		if (this.onConnectionResult) {
-			this.onConnectionResult(this.state);
+			this.onConnectionResult(this.state, reason);
 			this.onConnectionResult = null;
 		}
 	}
@@ -179,10 +184,10 @@ class VTOLLobby {
 		if (this.onLobbyEnd) this.onLobbyEnd();
 	}
 
-	public waitForConnectionResult(): Promise<LobbyConnectionStatus> {
-		return new Promise<LobbyConnectionStatus>((res) => {
-			if (this.state == LobbyConnectionStatus.Connected) { res(this.state); }
-			else this.onConnectionResult = res;
+	public waitForConnectionResult(): Promise<LobbyConnectionResult> {
+		return new Promise<LobbyConnectionResult>((res) => {
+			if (this.state == LobbyConnectionStatus.Connected) { res({ status: this.state, reason: "Connected" }); }
+			else this.onConnectionResult = (state, reason) => res({ status: state, reason: reason });
 		});
 	}
 
@@ -253,5 +258,6 @@ export {
 	Client,
 	MissionInfo,
 	LobbyConnectionStatus,
+	LobbyConnectionResult,
 	RecordedLobbyInfo
 };
