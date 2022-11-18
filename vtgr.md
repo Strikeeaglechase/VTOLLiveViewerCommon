@@ -50,7 +50,7 @@ The general flow to setup a replay/game is as follows
 1. `Application#CreateLobby` is called with an ID
 2. A `VTOLLobby` instance and `MessageHandler` instance are created with the ID
 3. `VTOLLobby#UpdateLobbyInfo` and `VTOLLobby#UpdateMissionInfo` are called to fill out the lobby info
-4. `NetInstantiate` calls are made, which spawns the various entities which now can receive RPCs/data
+4. `MessageHandler#NetInstantiate` calls are made, which spawns the various entities which now can receive RPCs/data
 
 ## MessageHandler (instance)
 
