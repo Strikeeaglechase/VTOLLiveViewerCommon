@@ -10,6 +10,12 @@ enum LoggerLevel {
 
 type LogFormatter = (timestamp: string, message: string, level: LoggerLevel, forFile: boolean) => string;
 
+function extractSections(logMessage: string): string[] {
+	const sections = logMessage.match(/\[.*?\]/g) || [];
+	const message = logMessage.replace(/\[.*?\]/g, '').trim();
+	return [...sections, message];
+}
+
 class Logger {
 	public static instance = new Logger();
 	private lastCheckedPath = "";
@@ -24,8 +30,10 @@ class Logger {
 		}
 
 		const formatter = (color: (...text: unknown[]) => string) => (timestamp: string, message: string, level: LoggerLevel, forFile: boolean) => {
-			if (forFile) return `[${timestamp}][${LoggerLevel[level]}] ${message}`;
-			return `[${timestamp}]` + color(`[${LoggerLevel[level]}] ${message}`);
+			let pad = " ";
+			if (message.startsWith("[")) pad = "";
+			if (forFile) return `[${timestamp}][${LoggerLevel[level]}]${pad}${message}`;
+			return `[${timestamp}]` + color(`[${LoggerLevel[level]}]${pad}${message}`);
 		};
 
 		this.formatters = {
@@ -90,6 +98,22 @@ class Logger {
 
 	public static error(message: string, target = Logger.instance.defaultLogFile) {
 		Logger.instance.log(message, LoggerLevel.ERROR, target);
+	}
+
+	public static processHCLog(rawMessage: string) {
+		// Log message: [2023-02-05T19:46:44.6713395Z][109775242904288633][INFO] Message
+		// Parse out the timestamp, process ID, and log level, and then log the message without using hardcoded lengths
+		const [timestamp, lobbyId, level, message] = extractSections(rawMessage);
+
+		let logMethod: (message: string) => void;
+		switch (level) {
+			case "[INFO]": logMethod = Logger.info; break;
+			case "[WARN]": logMethod = Logger.warn; break;
+			case "[ERROR]": logMethod = Logger.error; break;
+			default: logMethod = Logger.info; break;
+		}
+
+		logMethod(`[HC]${lobbyId} ${message}`);
 	}
 }
 
