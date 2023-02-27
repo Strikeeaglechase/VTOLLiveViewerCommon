@@ -1,7 +1,9 @@
 import fs from "fs";
 
-import { compressRpcPacketsWithStats, decompressRpcPackets } from "./compression.js";
+import { compressRpcPackets, decompressRpcPackets } from "./vtcompression.js";
 
+// DEBUG VTGR FILE
+/*
 const chunks = [
 	{
 		"start": 0,
@@ -512,3 +514,29 @@ console.log(`Total bytes: ${totalBytes}`);
 for (let key in totalStats) {
 	console.log(`${key}: ${totalStats[key]} (${(totalStats[key] / totalBytes * 100).toFixed(2)}%)`);
 }
+*/
+
+
+// DEBUG RAW BYTES
+// const data = _data as number[];
+// fs.writeFileSync("../../data.bin", Buffer.from(data));
+// const decompressed = decompressRpcPackets(data);
+
+// DEBUG COMPRESSION
+const packets = JSON.parse(fs.readFileSync("../../resync.json", "utf8"));
+const compressed = fs.readFileSync("../../resync.bin", "binary").split("").map(c => c.charCodeAt(0));
+const resultCompressed = compressRpcPackets(packets, true);
+
+// fs.writeFileSync("../../resync-out.bin", Buffer.from(resultCompressed));
+// fs.writeFileSync("../../delta.bin", Buffer.from(resultCompressed.map((c, i) => c - compressed[i])));
+// fs.writeFileSync("../../what.txt", resultCompressed.join("\n"));
+// for (let i = 0; i < compressed.length; i++) {
+// 	if (compressed[i] !== resultCompressed[i]) {
+// 		console.log(`Mismatch at ${i}, expected ${compressed[i]}, got ${resultCompressed[i]}`);
+// 		break;
+// 	}
+// }
+
+const result = decompressRpcPackets(resultCompressed);
+// console.log(result.length, packets.length);
+console.log(JSON.stringify(result) == JSON.stringify(packets) ? "OK" : "FAIL");

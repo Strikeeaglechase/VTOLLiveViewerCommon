@@ -7,7 +7,7 @@
 /* eslint-disable no-redeclare */
 import { Buffer } from "buffer";
 
-import { compressRpcPackets, decompressRpcPackets } from "./compression.js";
+import { compressRpcPackets, decompressRpcPackets } from "./compression/vtcompression.js";
 
 /* eslint-disable @typescript-eslint/no-empty-function */
 /* eslint-disable @typescript-eslint/ban-types */
@@ -167,7 +167,7 @@ class RPCController {
 	}
 
 	static flush() {
-		const compressed = compressRpcPackets(this.instance.rpcSendPool);
+		const compressed = compressRpcPackets(this.instance.rpcSendPool, true);
 		this.instance.rpcSendPool = [];
 		// @ts-ignore
 		this.instance.sendHandler(new Uint8Array(compressed));

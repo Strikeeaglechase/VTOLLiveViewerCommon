@@ -1,11 +1,14 @@
 // IMPORTANT: Numbers should be stored as at least 2 byte values, using single bytes has caused a shit load of issues
 
-const VERSION = 2;
-const debug_decompress = false;
+const VERSION = 3;
+export const debug_decompress = false;
+export const debug_compress = false;
+import { RPCPacket } from "../rpc.js";
+import { decompressRpcPacketsV1 } from "./decompressV1.js";
+import { decompressRpcPacketsV2 } from "./decompressV2.js";
+import { decompressRpcPacketsV3 } from "./decompressV3.js";
 
-import { RPCPacket } from "./rpc.js";
-
-enum PacketFlags {
+export enum PacketFlags {
 	NoId = 0b00000001,
 	HasId = 0b00000010,
 	JSONBody = 0b00000100,
@@ -15,7 +18,7 @@ enum PacketFlags {
 	HasTimestamp = 0b01000000,
 }
 
-enum ArgumentType {
+export enum ArgumentType {
 	String = 0b00000001,
 	Number = 0b00000010,
 	Boolean = 0b00000100,
@@ -23,7 +26,7 @@ enum ArgumentType {
 	Vector = 0b00010000,
 }
 
-const bitCheck = (value: number, bit: number) => (value & bit) === bit;
+export const bitCheck = (value: number, bit: number) => (value & bit) === bit;
 const isNum = (num?: string) => num != undefined && parseInt(num) < 2 ** 16 && num.split("").every(c => !isNaN(parseInt(c)));
 
 function allArgsCanCompress(args: unknown[]) {
@@ -55,7 +58,7 @@ function exactNumToBytes(num: number) {
 	return new Uint8Array(i32.buffer);
 }
 
-function exactBytesToNum(bytes: number[]) {
+export function exactBytesToNum(bytes: number[]) {
 	const ui8 = new Uint8Array(bytes);
 	const i32 = new Float64Array(ui8.buffer);
 	return i32[0];
@@ -63,6 +66,9 @@ function exactBytesToNum(bytes: number[]) {
 
 // If the number is <128 then store as one byte, otherwise two bytes, highest bit is used for indicating if the number is >127
 function compressInt(num: number) {
+	if (num > 2 ** 16) {
+		console.log(`compressInt called with ${num} which is too large (max: ${2 ** 16})`);
+	}
 	if (num < 128) {
 		return [num];
 	} else {
@@ -70,7 +76,7 @@ function compressInt(num: number) {
 	}
 }
 
-function decompressInt(readOne: () => number) {
+export function decompressInt(readOne: () => number) {
 	const first = readOne();
 	if (first < 128) {
 		return first;
@@ -110,7 +116,8 @@ function compressArgs(args: unknown[], stat: (name: string, len: number) => void
 	return result;
 }
 
-function decompressArgs(values: number[]) {
+export function decompressArgs(values: number[]) {
+	if (debug_decompress) console.log(` - Arg data: ${values.join(" ")}`);
 	const result: unknown[] = [];
 	let i = 0;
 	while (i < values.length) {
@@ -121,21 +128,25 @@ function decompressArgs(values: number[]) {
 				const str = String.fromCharCode(...values.slice(i, i + len));
 				i += len;
 				result.push(str);
+				if (debug_decompress) console.log(`  - Arg(${i - len}): String(${len})  ${str}`);
 				break;
 			}
 			case ArgumentType.Number: {
 				const num = bytesToNum(values.slice(i, i + 4));
 				i += 4;
 				result.push(num);
+				if (debug_decompress) console.log(`  - Arg(${i - 4}): Number(4)  ${num}`);
 				break;
 			}
 			case ArgumentType.Boolean: {
 				const bool = values[i++] === 1;
 				result.push(bool);
+				if (debug_decompress) console.log(`  - Arg(${i - 1}): Boolean(1)  ${bool}`);
 				break;
 			}
 			case ArgumentType.Null: {
 				result.push(null);
+				if (debug_decompress) console.log(`  - Arg(${i - 1}): Null`);
 				break;
 			}
 			case ArgumentType.Vector: {
@@ -146,26 +157,53 @@ function decompressArgs(values: number[]) {
 				const z = bytesToNum(values.slice(i, i + 4));
 				i += 4;
 				result.push({ x, y, z });
+				if (debug_decompress) console.log(`  - Arg(${i - (4 * 3)}): Vector(12)  ${x}, ${y}, ${z}`);
 				break;
 			}
 			default:
 				throw new Error(`Unknown argument type ${type}`);
+			// console.error(`Unknown argument type ${type}`);
+			// break;
 		}
 	}
 	return result;
 }
 
-
-function compressRpcPackets(rpcPackets: RPCPacket[]) {
+function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean) {
 	const result: number[] = [];
+	const push = (reason: string, ...nums: number[]) => {
+		result.push(...nums);
+		if (debug_compress) console.log(`${reason}  ${nums.join(" ")}`);
+
+		nums.forEach((num, idx) => {
+			if (num < 0 || num > 255) {
+				console.log(`Handling ${reason}`);
+				console.log(`Values: ${nums.join(" ")}`);
+				throw new Error(`Invalid number ${num} at index ${idx}`);
+			}
+		});
+	};
+
+
+	if (rpcPackets[0].timestamp && includeTimestamps) {
+		if (!rpcPackets.every(p => p.timestamp)) {
+			console.log(JSON.stringify(rpcPackets));
+			throw new Error("All packets must have a timestamp if any do");
+		} else {
+			rpcPackets = rpcPackets.sort((a, b) => a.timestamp! - b.timestamp!);
+		}
+	}
+
+
 	// Format
 	// {version} {num strs} {str1len} [str1] {str2len} [str2] ...
 	// {num rpc packets} {rpc1 len} [rpc1] {rpc2 len} [rpc2] ...
 
-	result.push(VERSION);
+	push("version", VERSION);
 
 	// Find all strings, store in beginning of packet
 	const strs = new Set<string>();
+	const strIdx = (str: string) => compressInt(strings.indexOf(str));
 	rpcPackets.forEach(packet => {
 		strs.add(packet.className.toString());
 		strs.add(packet.method.toString());
@@ -173,55 +211,63 @@ function compressRpcPackets(rpcPackets: RPCPacket[]) {
 	});
 
 	const strings = [...strs];
-	result.push(...compressInt(strings.length));
+	push("num-strs", ...compressInt(strings.length));
 
 	strings.forEach(string => {
-		result.push(string.length);
-		result.push(...string.split('').map(c => c.charCodeAt(0)));
+		push("header-string-len", string.length);
+		push("header-string", ...string.split('').map(c => c.charCodeAt(0)));
 	});
 
 	if (strings.length > 2 ** 16) throw new Error(`Too many strings (${strings.length})`);
 
 	// Timestamp offset for the packets
 	const timestampOffset = rpcPackets[0].timestamp ?? 0;
-	result.push(...exactNumToBytes(timestampOffset));
+	if (includeTimestamps) {
+		rpcPackets.forEach((packet, idx) => {
+			if (packet.timestamp != undefined && packet.timestamp < timestampOffset) {
+				console.log(`Packet ${idx} has timestamp ${packet.timestamp} which is less than the offset ${timestampOffset}`);
+			}
+		});
+	}
+	push("timestamp-offset", ...exactNumToBytes(timestampOffset));
 
 	// Add rpc packets
 	// RPC Packet format: {classNameIdx} {methodNameIdx} {PacketFlags} {idIdx} {arglen} [arg str]
-	result.push(...exactNumToBytes(rpcPackets.length));
+	push("packet-length", ...exactNumToBytes(rpcPackets.length));
 	rpcPackets.forEach(packet => {
 		const argCompress = allArgsCanCompress(packet.args);
 		const idIsNum = isNum(packet.id);
 		const packetFlags = (packet.id ? PacketFlags.HasId : PacketFlags.NoId) |
 			(argCompress ? PacketFlags.BinBody : PacketFlags.JSONBody) |
 			(idIsNum ? PacketFlags.IdIsNumber : PacketFlags.IdIsString) |
-			(packet.timestamp ? PacketFlags.HasTimestamp : 0);
+			((packet.timestamp && includeTimestamps) ? PacketFlags.HasTimestamp : 0);
 
-		result.push(strings.indexOf(packet.className.toString()));
-		result.push(strings.indexOf(packet.method.toString()));
 
-		result.push(packetFlags);
+		push("class-name", ...strIdx(packet.className.toString()));
+		push("method", ...strIdx(packet.method.toString()));
+
+		push("packet-flags", packetFlags);
 
 		// Should this be done in multiple lines, yes, am I going to? No!
-		if (packet.id) result.push(...(idIsNum ? compressInt(parseInt(packet.id)) : [strings.indexOf(packet.id)]));
-		if (packet.timestamp) {
-			result.push(...compressInt(packet.timestamp - timestampOffset));
+		if (packet.id) push("id", ...(idIsNum ? compressInt(parseInt(packet.id)) : strIdx(packet.id)));
+		if (packet.timestamp && includeTimestamps) {
+			push("packet-timestamp", ...compressInt(packet.timestamp - timestampOffset));
 		}
 
 		if (argCompress) {
 			const args = compressArgs(packet.args);
 			if (args.length > 2 ** 16) throw new Error(`Binary Arguments too long (${args.length})`);
-			result.push(...compressInt(args.length), ...args);
+			push("bin-args", ...compressInt(args.length), ...args);
 		} else {
 			const argStr = JSON.stringify(packet.args);
 			if (argStr.length > 2 ** 16) throw new Error(`JSON Argument string too long (${argStr.length})`);
-			result.push(...compressInt(argStr.length), ...argStr.split('').map(c => c.charCodeAt(0)));
+			push("json-args", ...compressInt(argStr.length), ...argStr.split('').map(c => c.charCodeAt(0)));
 		}
 	});
-
 	return result;
 }
 
+/* V2 implementation:
 function compressRpcPacketsWithStats(rpcPackets: RPCPacket[]) {
 	const stats: Record<string, number> = {};
 	function stat(name: string, len: number) {
@@ -307,196 +353,7 @@ function compressRpcPacketsWithStats(rpcPackets: RPCPacket[]) {
 
 	return { result, stats };
 }
-
-function decompressRpcPacketsV1(bytes: number[]) {
-	if (bytes.length == 0) return [];
-	let idx = 0;
-
-	function read(amt = 1) {
-		const result = bytes.slice(idx, idx + amt);
-		idx += amt;
-		return result;
-	}
-
-	function readOne() {
-		return read(1)[0];
-	}
-
-	function peak() {
-		return bytes[idx];
-	}
-
-	let version = readOne();
-	if (debug_decompress) console.log(`Version: ${version}`);
-
-	const numStrs = decompressInt(readOne);
-	if (debug_decompress) console.log(`Str count: ${numStrs}`);
-	const strings = [];
-	for (let i = 0; i < numStrs; i++) {
-		const strLen = readOne();
-		const str = read(strLen).map(c => String.fromCharCode(c)).join('');
-		strings.push(str);
-		if (debug_decompress) console.log(` #${i} - ${str}`);
-	}
-
-	// RPC Packet format: {classNameIdx} {methodNameIdx} {hasId} {idIdx} {arglen} [arg str]
-	// Read rpc packets
-	const numRpcPackets = version == -1 ? decompressInt(readOne) : exactBytesToNum(read(8));
-	const rpcPackets: RPCPacket[] = [];
-	if (debug_decompress) console.log(`RPC Count: ${numRpcPackets}`);
-	for (let i = 0; i < numRpcPackets; i++) {
-		const classNameIdx = readOne();
-		const methodNameIdx = readOne();
-		const packetFlags = readOne();
-
-
-		const idIsNum = bitCheck(packetFlags, PacketFlags.IdIsNumber);
-		const hasId = bitCheck(packetFlags, PacketFlags.HasId);
-		const hasTimestamp = bitCheck(packetFlags, PacketFlags.HasTimestamp);
-
-		if (debug_decompress) {
-			console.log(`RPC #${i}`);
-			console.log(` - Class: ${classNameIdx} - ${strings[classNameIdx]}`);
-			console.log(` - Method: ${methodNameIdx} - ${strings[methodNameIdx]}`);
-			console.log(` - idIsNum: ${idIsNum}`);
-			console.log(` - hasId: ${hasId}`);
-			console.log(` - hasTimestamp: ${hasTimestamp}`);
-		}
-
-		// const idIdx = bitCheck(packetFlags, PacketFlags.HasId) ? readOne() : undefined;
-		let id: string | undefined = undefined;
-		if (hasId) {
-			if (idIsNum) {
-				id = decompressInt(readOne).toString();
-			} else {
-				id = strings[readOne()];
-			}
-		}
-		if (debug_decompress) console.log(` - ID: ${id}`);
-
-		let timestamp: number | undefined = undefined;
-		if (hasTimestamp) timestamp = exactBytesToNum(read(8));
-		if (debug_decompress) console.log(` - Timestamp: ${timestamp}`);
-
-		const argLen = decompressInt(readOne);
-		if (debug_decompress) console.log(` - Arg len: ${argLen}`);
-		let args: unknown[] = [];
-		if (bitCheck(packetFlags, PacketFlags.BinBody)) {
-			args = decompressArgs(read(argLen));
-		} else {
-			const argStr = read(argLen).map(c => String.fromCharCode(c)).join('');
-			if (debug_decompress) console.log(` - Arg str: ${argStr}`);
-			args = JSON.parse(argStr);
-		}
-
-		rpcPackets.push({
-			className: strings[classNameIdx],
-			method: strings[methodNameIdx],
-			id: id,
-			timestamp: timestamp,
-			args: args
-		});
-	}
-
-	return rpcPackets;
-}
-
-function decompressRpcPacketsV2(bytes: number[]) {
-	if (bytes.length == 0) return [];
-	let idx = 0;
-
-	function read(amt = 1) {
-		const result = bytes.slice(idx, idx + amt);
-		idx += amt;
-		return result;
-	}
-
-	function readOne() {
-		return read(1)[0];
-	}
-
-	function peak() {
-		return bytes[idx];
-	}
-
-	let version = readOne();
-	if (debug_decompress) console.log(`Version: ${version}`);
-
-	const numStrs = decompressInt(readOne);
-	if (debug_decompress) console.log(`Str count: ${numStrs}`);
-	const strings = [];
-	for (let i = 0; i < numStrs; i++) {
-		const strLen = readOne();
-		const str = read(strLen).map(c => String.fromCharCode(c)).join('');
-		strings.push(str);
-		if (debug_decompress) console.log(` #${i} - ${str}`);
-	}
-
-	// Get timestamp offset
-	const timestampOffset = exactBytesToNum(read(8));
-	if (debug_decompress) console.log(`Timestamp offset: ${timestampOffset}`);
-
-	// RPC Packet format: {classNameIdx} {methodNameIdx} {hasId} {idIdx} {arglen} [arg str]
-	// Read rpc packets
-	const numRpcPackets = version == -1 ? decompressInt(readOne) : exactBytesToNum(read(8));
-	const rpcPackets: RPCPacket[] = [];
-	if (debug_decompress) console.log(`RPC Count: ${numRpcPackets}`);
-	for (let i = 0; i < numRpcPackets; i++) {
-		const classNameIdx = readOne();
-		const methodNameIdx = readOne();
-		const packetFlags = readOne();
-
-
-		const idIsNum = bitCheck(packetFlags, PacketFlags.IdIsNumber);
-		const hasId = bitCheck(packetFlags, PacketFlags.HasId);
-		const hasTimestamp = bitCheck(packetFlags, PacketFlags.HasTimestamp);
-
-		if (debug_decompress) {
-			console.log(`RPC #${i}`);
-			console.log(` - Class: ${classNameIdx} - ${strings[classNameIdx]}`);
-			console.log(` - Method: ${methodNameIdx} - ${strings[methodNameIdx]}`);
-			console.log(` - idIsNum: ${idIsNum}`);
-			console.log(` - hasId: ${hasId}`);
-			console.log(` - hasTimestamp: ${hasTimestamp}`);
-		}
-
-		// const idIdx = bitCheck(packetFlags, PacketFlags.HasId) ? readOne() : undefined;
-		let id: string | undefined = undefined;
-		if (hasId) {
-			if (idIsNum) {
-				id = decompressInt(readOne).toString();
-			} else {
-				id = strings[readOne()];
-			}
-		}
-		if (debug_decompress) console.log(` - ID: ${id}`);
-
-		let timestamp: number | undefined = undefined;
-		if (hasTimestamp) timestamp = decompressInt(readOne) + timestampOffset;
-		if (debug_decompress) console.log(` - Timestamp: ${timestamp}`);
-
-		const argLen = decompressInt(readOne);
-		if (debug_decompress) console.log(` - Arg len: ${argLen}`);
-		let args: unknown[] = [];
-		if (bitCheck(packetFlags, PacketFlags.BinBody)) {
-			args = decompressArgs(read(argLen));
-		} else {
-			const argStr = read(argLen).map(c => String.fromCharCode(c)).join('');
-			if (debug_decompress) console.log(` - Arg str: ${argStr}`);
-			args = JSON.parse(argStr);
-		}
-
-		rpcPackets.push({
-			className: strings[classNameIdx],
-			method: strings[methodNameIdx],
-			id: id,
-			timestamp: timestamp,
-			args: args
-		});
-	}
-
-	return rpcPackets;
-}
+*/
 
 type Decompressor = (bytes: number[]) => RPCPacket[];
 
@@ -505,6 +362,7 @@ const decompressVersions: Decompressor[] = [
 	() => { },
 	decompressRpcPacketsV1,
 	decompressRpcPacketsV2,
+	decompressRpcPacketsV3,
 ];
 
 function decompressRpcPackets(bytes: number[]) {
@@ -512,11 +370,21 @@ function decompressRpcPackets(bytes: number[]) {
 	const version = bytes[0];
 	if (version < 1 || version >= decompressVersions.length) {
 		console.error(`Invalid version for decompress, expected 1-${decompressVersions.length}, got ${version}`);
+		console.error(`Data:`);
+		// console.error("[" + bytes.join(",") + "]");
 		return [];
 	}
 
-	const decompressor = decompressVersions[version];
-	return decompressor(bytes);
+	try {
+		const decompressor = decompressVersions[version];
+		return decompressor(bytes);
+	} catch (e) {
+		console.error(`Decompression error on packet with ${bytes.length} bytes version ${version}`);
+		console.error(e);
+		console.error(`Data:`);
+		// console.error("[" + bytes.join(",") + "]");
+		return [];
+	}
 }
 
-export { compressRpcPackets, decompressRpcPackets, compressRpcPacketsWithStats };
+export { compressRpcPackets, decompressRpcPackets };

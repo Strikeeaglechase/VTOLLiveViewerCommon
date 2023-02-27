@@ -4,7 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-empty-function */
 import { eraseCookie, setCookie } from "./cookieHelper.js";
-import { EnableRPCs, RPC } from "./rpc.js";
+import { EnableRPCs, RPC, RPCPacket } from "./rpc.js";
 
 interface PacketBase { type: PacketType; }
 
@@ -63,15 +63,16 @@ class Player implements RawPlayerInfo {
 }
 
 
-interface RPCPacket {
-	className: string;
-	method: string;
-	args: any[];
-	id?: string;
-	gameId?: string;
-	pid?: number;
-	// type: PacketType.rpcPacket;
-}
+// interface RPCPacket {
+// 	[x: string]: any;
+// 	className: string;
+// 	method: string;
+// 	args: any[];
+// 	id?: string;
+// 	gameId?: string;
+// 	pid?: number;
+// 	// type: PacketType.rpcPacket;
+// }
 
 interface AssignID {
 	id: string;
@@ -247,7 +248,7 @@ export {
 	Packet,
 	PacketBase,
 	PacketType,
-	RPCPacket,
+	// RPCPacket,
 	MultiRPCPacket,
 	Vector3,
 	Player,

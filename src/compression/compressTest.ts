@@ -1,13 +1,13 @@
 import _ from "lodash";
 
-import { compressRpcPackets, decompressRpcPackets } from "./compression.js";
-import { RPCPacket } from "./rpc";
+import { RPCPacket } from "../rpc";
+import { compressRpcPackets, decompressRpcPackets } from "./vtcompression.js";
 
 const inputPackets: RPCPacket[] = [
 	{ className: "TClass1", method: "method1", args: ["hello", 5, "world", true, null], id: undefined, timestamp: Date.now() - 100 },
 	{ className: "TClass1", method: "method1", args: ["hello", 5, "world", true, null], id: "5", timestamp: Date.now() - 50 },
 	{ className: "ComplexClass", method: "JsonBody", args: [[[{ hello: "world", this: [{ is: "complex" }] }]]], id: undefined, timestamp: Date.now() },
-	{ className: "ComplexClass", method: "JsonBody", args: [[[{ hello: "world", this: [{ is: "complex" }] }]]], id: "helloWorld", timestamp: undefined },
+	{ className: "ComplexClass", method: "JsonBody", args: [[[{ hello: "world", this: [{ is: "complex" }] }]]], id: "helloWorld", timestamp: Date.now() + 50 },
 ];
 // Fill the input with a shit load of packets with different strings;
 for (let i = 0; i < 300; i++) {
@@ -16,7 +16,7 @@ for (let i = 0; i < 300; i++) {
 }
 
 
-const bytes = compressRpcPackets(inputPackets);
+const bytes = compressRpcPackets(inputPackets, true);
 const jsonSize = JSON.stringify(inputPackets).length;
 console.log(`Byte Size: ${bytes.length} JSON Size: ${jsonSize}`);
 const decompressed = decompressRpcPackets(bytes);
