@@ -28,6 +28,7 @@ export enum ArgumentType {
 
 export const bitCheck = (value: number, bit: number) => (value & bit) === bit;
 const isNum = (num?: string) => num != undefined && parseInt(num) < 2 ** 16 && num.split("").every(c => !isNaN(parseInt(c)));
+const filterAsciiStr = (str: string) => str.split("").filter(c => c.charCodeAt(0) < 256).join("");
 
 function allArgsCanCompress(args: unknown[]) {
 	return args.every(arg => {
@@ -90,26 +91,32 @@ function compressArgs(args: unknown[], stat: (name: string, len: number) => void
 	const result: number[] = [];
 	args.forEach(arg => {
 		if (typeof arg == "string") {
-			result.push(ArgumentType.String, arg.length);
-			result.push(...arg.split('').map(c => c.charCodeAt(0)));
+			const strArg = filterAsciiStr(arg);
+			result.push(ArgumentType.String, strArg.length);
+			result.push(...strArg.split('').map(c => c.charCodeAt(0)));
 			stat("arg header", 2);
-			stat("arg string", arg.length);
+			stat("arg string", strArg.length);
+			// console.log(`String: ${result.slice(-(arg.length + 2))}`);
 		} else if (typeof arg == "number") {
 			result.push(ArgumentType.Number, ...numToBytes(arg));
 			stat("arg header", 1);
 			stat("arg number", 4);
+			// console.log(`Number: ${result.slice(-5)}`);
 		} else if (typeof arg == "boolean") {
 			result.push(ArgumentType.Boolean, arg ? 1 : 0);
 			stat("arg header", 1);
 			stat("arg bool", 1);
+			// console.log(`Bool: ${result.slice(-2)}`);
 		} else if (arg === null) {
 			result.push(ArgumentType.Null);
 			stat("arg header", 1);
+			// console.log(`Null: ${result.slice(-1)}`);
 		} else if (typeof arg == "object" && "x" in arg && "y" in arg && "z" in arg) {
 			const a = arg as { x: number, y: number, z: number; };
 			result.push(ArgumentType.Vector, ...numToBytes(a.x), ...numToBytes(a.y), ...numToBytes(a.z));
 			stat("arg header", 1);
 			stat("arg vector", 4 * 3);
+			// console.log(`Vector: ${result.slice(-13)}`);
 		}
 	});
 
@@ -214,8 +221,9 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 	push("num-strs", ...compressInt(strings.length));
 
 	strings.forEach(string => {
-		push("header-string-len", string.length);
-		push("header-string", ...string.split('').map(c => c.charCodeAt(0)));
+		const str = filterAsciiStr(string);
+		push("header-string-len", str.length);
+		push("header-string", ...str.split('').map(c => c.charCodeAt(0)));
 	});
 
 	if (strings.length > 2 ** 16) throw new Error(`Too many strings (${strings.length})`);
@@ -259,7 +267,7 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 			if (args.length > 2 ** 16) throw new Error(`Binary Arguments too long (${args.length})`);
 			push("bin-args", ...compressInt(args.length), ...args);
 		} else {
-			const argStr = JSON.stringify(packet.args);
+			const argStr = filterAsciiStr(JSON.stringify(packet.args));
 			if (argStr.length > 2 ** 16) throw new Error(`JSON Argument string too long (${argStr.length})`);
 			push("json-args", ...compressInt(argStr.length), ...argStr.split('').map(c => c.charCodeAt(0)));
 		}
