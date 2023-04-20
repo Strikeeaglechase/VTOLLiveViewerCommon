@@ -10,7 +10,7 @@ const inputPackets: RPCPacket[] = [
 	{ className: "ComplexClass", method: "JsonBody", args: [[[{ hello: "world", this: [{ is: "complex" }] }]]], id: "helloWorld", timestamp: Date.now() + 50 },
 ];
 // Fill the input with a shit load of packets with different strings;
-for (let i = 0; i < 300; i++) {
+for (let i = 0; i < 50; i++) {
 	const id = (i % 2000).toString();
 	inputPackets.push({ className: `TClass${id}`, method: "method1", args: ["hello", 5, "world", true, null], id: id, timestamp: Date.now() });
 }

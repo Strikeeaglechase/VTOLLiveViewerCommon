@@ -122,6 +122,18 @@ interface LobbyConnectionResult {
 	reason: string;
 }
 
+interface VTGRDataChunk {
+	start: number;
+	length: number;
+}
+
+interface VTGRHeader {
+	info: RecordedLobbyInfo;
+	id: string;
+	chunks: VTGRDataChunk[];
+}
+
+
 @EnableRPCs("instance")
 class VTOLLobby {
 	public name = "";
@@ -260,5 +272,7 @@ export {
 	MissionInfo,
 	LobbyConnectionStatus,
 	LobbyConnectionResult,
-	RecordedLobbyInfo
+	RecordedLobbyInfo,
+	VTGRDataChunk,
+	VTGRHeader,
 };

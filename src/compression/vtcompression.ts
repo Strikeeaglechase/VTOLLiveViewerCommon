@@ -3,6 +3,7 @@
 const VERSION = 3;
 export const debug_decompress = false;
 export const debug_compress = false;
+export const debug_packet_structure = true;
 import { RPCPacket } from "../rpc.js";
 import { decompressRpcPacketsV1 } from "./decompressV1.js";
 import { decompressRpcPacketsV2 } from "./decompressV2.js";
@@ -178,9 +179,39 @@ export function decompressArgs(values: number[]) {
 
 function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean) {
 	const result: number[] = [];
+	let packetStructureDebug = "";
+	const packetStructureDebugAliases: Record<string, string> = {
+		"version": "V",
+		"num-strs": "S",
+		"header-string-len": "L",
+		"timestamp-offset": "TS-Off",
+		"class-name": "C",
+		"method": "M",
+		"packet-flags": "F",
+		"packet-timestamp": "T",
+		"packet-length": "PLen",
+		"header-string": "string",
+		"id": "I"
+	};
 	const push = (reason: string, ...nums: number[]) => {
 		result.push(...nums);
+
+		// Debug
 		if (debug_compress) console.log(`${reason}  ${nums.join(" ")}`);
+		if (debug_packet_structure) {
+			let reasonName = reason;
+			if (reasonName in packetStructureDebugAliases) reasonName = packetStructureDebugAliases[reasonName];
+
+			if (nums.length == 1) packetStructureDebug += reasonName[0];
+			else if (nums.length < 3) packetStructureDebug += reasonName.substring(0, nums.length).padEnd(nums.length, "-");
+			else {
+				// Goal: create a string with length nums.length, surrounded by brackets, with "reason" centered within it
+				const allowedName = reasonName.substring(0, nums.length - 2);
+				const padLeft = Math.floor((nums.length - 2 - allowedName.length) / 2);
+				const padRight = nums.length - 2 - allowedName.length - padLeft;
+				packetStructureDebug += "[" + ("-".repeat(padLeft)) + allowedName + ("-".repeat(padRight)) + "]";
+			}
+		}
 
 		nums.forEach((num, idx) => {
 			if (num < 0 || num > 255) {
@@ -272,6 +303,16 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 			push("json-args", ...compressInt(argStr.length), ...argStr.split('').map(c => c.charCodeAt(0)));
 		}
 	});
+
+	if (debug_packet_structure) {
+		packetStructureDebug += "\n\n";
+		for (let key in packetStructureDebugAliases) {
+			packetStructureDebug += ` ${packetStructureDebugAliases[key]} -> ${key}\n`;
+		}
+
+		console.log(packetStructureDebug);
+	}
+
 	return result;
 }
 
