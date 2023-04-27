@@ -3,7 +3,7 @@
 const VERSION = 3;
 export const debug_decompress = false;
 export const debug_compress = false;
-export const debug_packet_structure = true;
+export const debug_packet_structure = false;
 import { RPCPacket } from "../rpc.js";
 import { decompressRpcPacketsV1 } from "./decompressV1.js";
 import { decompressRpcPacketsV2 } from "./decompressV2.js";

@@ -150,6 +150,7 @@ class VTOLLobby {
 	private onMissionInfo: ((mission: MissionInfo) => void) | null;
 	private onConnectionResult: ((state: LobbyConnectionStatus, reason: string) => void) | null;
 	public onLobbyEnd: (() => void) | null = null;
+	public onLobbyRestart: (() => void) | null = null;
 	constructor(public id: string) { }
 
 	@RPC("in")
@@ -195,6 +196,13 @@ class VTOLLobby {
 	public SyncLeaveLobby() {
 		this.isConnected = false;
 		if (this.onLobbyEnd) this.onLobbyEnd();
+	}
+
+	@RPC("in")
+	public SyncLobbyRestart() {
+		this.isConnected = false;
+		this.state = LobbyConnectionStatus.None;
+		if (this.onLobbyRestart) this.onLobbyRestart();
 	}
 
 	public waitForConnectionResult(): Promise<LobbyConnectionResult> {

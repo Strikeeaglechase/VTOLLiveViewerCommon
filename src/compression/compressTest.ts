@@ -1,3 +1,4 @@
+import fs from "fs";
 import _ from "lodash";
 
 import { RPCPacket } from "../rpc";
@@ -14,11 +15,10 @@ for (let i = 0; i < 50; i++) {
 	const id = (i % 2000).toString();
 	inputPackets.push({ className: `TClass${id}`, method: "method1", args: ["hello", 5, "world", true, null], id: id, timestamp: Date.now() });
 }
-
-
 const bytes = compressRpcPackets(inputPackets, true);
 const jsonSize = JSON.stringify(inputPackets).length;
 console.log(`Byte Size: ${bytes.length} JSON Size: ${jsonSize}`);
+fs.writeFileSync("../../out.bin", bytes.map(b => String.fromCharCode(b)).join(""), "binary");
 const decompressed = decompressRpcPackets(bytes);
 console.log(`Test result: ${_.isEqual(decompressed, inputPackets)}`);
 // console.log(inputPackets);
