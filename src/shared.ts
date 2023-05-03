@@ -151,6 +151,7 @@ class VTOLLobby {
 	private onConnectionResult: ((state: LobbyConnectionStatus, reason: string) => void) | null;
 	public onLobbyEnd: (() => void) | null = null;
 	public onLobbyRestart: (() => void) | null = null;
+	public onLogMessage: ((message: string) => void) | null = null;
 	constructor(public id: string) { }
 
 	@RPC("in")
@@ -203,6 +204,11 @@ class VTOLLobby {
 		this.isConnected = false;
 		this.state = LobbyConnectionStatus.None;
 		if (this.onLobbyRestart) this.onLobbyRestart();
+	}
+
+	@RPC("in")
+	public LogMessage(message: string) {
+		if (this.onLogMessage) this.onLogMessage(message);
 	}
 
 	public waitForConnectionResult(): Promise<LobbyConnectionResult> {
