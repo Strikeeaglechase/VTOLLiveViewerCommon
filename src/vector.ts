@@ -4,6 +4,7 @@ interface IVector3 {
 	z: number;
 }
 
+
 function isVector(v: any): v is IVector3 {
 	return typeof v == "object" && v.x != null && v.y != null && v.x != null;
 }
