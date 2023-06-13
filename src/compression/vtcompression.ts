@@ -178,6 +178,11 @@ export function decompressArgs(values: number[]) {
 }
 
 function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean) {
+	if (rpcPackets.length == 0) {
+		console.log(`compressRpcPackets called with 0 packets`);
+		return [];
+	}
+
 	const result: number[] = [];
 	let packetStructureDebug = "";
 	const packetStructureDebugAliases: Record<string, string> = {
