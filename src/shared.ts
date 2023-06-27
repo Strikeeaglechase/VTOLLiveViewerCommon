@@ -2,8 +2,6 @@
 /* eslint-disable no-undef */
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-empty-function */
-import { eraseCookie, setCookie } from "./cookieHelper.js";
 import { EnableRPCs, RPC, RPCPacket } from "./rpc.js";
 
 interface PacketBase { type: PacketType; }
@@ -226,67 +224,61 @@ class VTOLLobby {
 	}
 }
 
-@EnableRPCs("instance")
-class Client {
-	public expectedReplayChunks = -1;
-	constructor(public id: string) { }
 
-	@RPC("out")
-	subscribe(gameId: string) { }
 
-	@RPC("out")
-	setAlphaKey(key: string) { }
-
-	@RPC("in")
-	createAlphaKey(key: string) {
-		console.log(`Got alpha key: ${key}`);
-		setCookie("alpha_key", key);
-	}
-
-	@RPC("in")
-	alphaAuthResult(success: boolean) {
-		console.log(`Alpha auth result: ${success}`);
-		if (!success) {
-			alert("Alpha key auth failed");
-			eraseCookie("alpha_key");
-		}
-	}
-
-	@RPC("out")
-	replayGame(id: string) { }
-
-	@RPC("in")
-	expectChunks(count: number) {
-		this.expectedReplayChunks = count;
-		console.log(`Expecting ${count} chunks for replay`);
-	}
-
-	@RPC("in")
-	ping(n: number) {
-		this.pong(n);
-	}
-
-	@RPC("out")
-	pong(n: number) { }
+enum UserScopes {
+	ALPHA_ACCESS = "alpha_access",
+	USER = "user",
+	ADMIN = "admin",
 }
 
+enum AuthType {
+	STEAM,
+}
+
+interface HCUser {
+	id: string;
+	username: string;
+	authType: AuthType;
+	scopes: UserScopes[];
+	pfpUrl: string;
+
+	exp?: number;
+}
+
+interface DbUserEntry {
+	id: string;
+	scopes: UserScopes[];
+	lastLoginTime: number;
+	createdAt: number;
+	lastUserObject: HCUser;
+}
+
+
 export {
+	Vector3,
+
 	Packet,
 	PacketBase,
 	PacketType,
-	// RPCPacket,
 	MultiRPCPacket,
-	Vector3,
-	Player,
-	RawPlayerInfo,
 	AssignID,
-	Team,
+
 	VTOLLobby,
-	Client,
-	MissionInfo,
 	LobbyConnectionStatus,
 	LobbyConnectionResult,
+	MissionInfo,
+
+	Player,
+	RawPlayerInfo,
+	Team,
+
 	RecordedLobbyInfo,
 	VTGRDataChunk,
 	VTGRHeader,
+
+	UserScopes,
+	AuthType,
+	HCUser,
+	DbUserEntry,
 };
