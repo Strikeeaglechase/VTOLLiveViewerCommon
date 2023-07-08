@@ -244,6 +244,7 @@ interface HCUser {
 	pfpUrl: string;
 
 	exp?: number;
+	iat?: number;
 }
 
 interface DbUserEntry {
