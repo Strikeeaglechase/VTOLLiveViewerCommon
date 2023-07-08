@@ -175,6 +175,10 @@ class Vector implements IVector3 {
 		return new Vector(Math.cos(theta) * Math.cos(phi), Math.sin(phi), Math.sin(theta) * Math.cos(phi));
 	}
 
+	static from(vec: IVector3) {
+		return new Vector(vec.x, vec.y, vec.z);
+	}
+
 	static randomDirection(): Vector {
 		return Vector.fromAngles(Math.random() * Math.PI * 2, Math.asin(Math.random() * 2 - 1));
 	}
