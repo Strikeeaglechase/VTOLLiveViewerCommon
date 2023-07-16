@@ -2,6 +2,7 @@
 /* eslint-disable no-undef */
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
+import { EventEmitter } from "./eventEmitter.js";
 import { EnableRPCs, RPC, RPCPacket } from "./rpc.js";
 
 interface PacketBase { type: PacketType; }
@@ -100,6 +101,7 @@ interface RecordedLobbyInfo {
 	lobbyName: string;
 	missionName: string;
 	missionId: string;
+	missionInfo: MissionInfo;
 	campaignId: string;
 	type: string;
 	map: string;
@@ -133,7 +135,7 @@ interface VTGRHeader {
 
 
 @EnableRPCs("instance")
-class VTOLLobby {
+class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_message" | "mission_info" | "connection_result">{
 	public name = "";
 	public missionName = "";
 	public playerCount = 0;
@@ -145,12 +147,15 @@ class VTOLLobby {
 	public isOpen = true;
 	public mission: MissionInfo | null = null;
 
-	private onMissionInfo: ((mission: MissionInfo) => void) | null;
-	private onConnectionResult: ((state: LobbyConnectionStatus, reason: string) => void) | null;
-	public onLobbyEnd: (() => void) | null = null;
-	public onLobbyRestart: (() => void) | null = null;
-	public onLogMessage: ((message: string) => void) | null = null;
-	constructor(public id: string) { }
+	// private onMissionInfo: ((mission: MissionInfo) => void) | null;
+	// private onConnectionResult: ((state: LobbyConnectionStatus, reason: string) => void) | null;
+	// public onLobbyEnd: (() => void) | null = null;
+	// public onLobbyRestart: (() => void) | null = null;
+	// public onLogMessage: ((message: string) => void) | null = null;
+	constructor(public id: string) {
+		super();
+		console.log(`VTOLLobby ${id} created`);
+	}
 
 	@RPC("in")
 	public UpdateLobbyInfo(name: string, missionName: string, playerCount: number, maxPlayers: number, isPrivate: boolean, isConnected: boolean, players: RawPlayerInfo[]) {
@@ -168,10 +173,7 @@ class VTOLLobby {
 	@RPC("in")
 	public UpdateMissionInfo(name: string, id: string, campaignId: string, workshopId: string, mapId: string, isBuiltin: boolean) {
 		this.mission = { name, id, campaignId, workshopId, mapId, isBuiltin };
-		if (this.onMissionInfo) {
-			this.onMissionInfo(this.mission);
-			this.onMissionInfo = null;
-		}
+		this.emit("mission_info", this.mission);
 	}
 
 	@RPC("in")
@@ -185,42 +187,44 @@ class VTOLLobby {
 		if (success) this.state = LobbyConnectionStatus.Connected;
 		else this.state = LobbyConnectionStatus.Invalid;
 
-		if (this.onConnectionResult) {
-			this.onConnectionResult(this.state, reason);
-			this.onConnectionResult = null;
-		}
+		this.emit("connection_result", this.state, reason);
 	}
 
 	@RPC("in")
 	public SyncLeaveLobby() {
 		this.isConnected = false;
-		if (this.onLobbyEnd) this.onLobbyEnd();
+		this.emit("lobby_end");
 	}
 
 	@RPC("in")
 	public SyncLobbyRestart() {
 		this.isConnected = false;
 		this.state = LobbyConnectionStatus.None;
-		if (this.onLobbyRestart) this.onLobbyRestart();
+		this.emit("lobby_restart");
 	}
 
 	@RPC("in")
 	public LogMessage(message: string) {
-		if (this.onLogMessage) this.onLogMessage(message);
+		this.emit("log_message", message);
 	}
 
-	public waitForConnectionResult(): Promise<LobbyConnectionResult> {
-		return new Promise<LobbyConnectionResult>((res) => {
-			if (this.state == LobbyConnectionStatus.Connected) { res({ status: this.state, reason: "Connected" }); }
-			else this.onConnectionResult = (state, reason) => res({ status: state, reason: reason });
-		});
+	public async waitForConnectionResult(): Promise<LobbyConnectionResult> {
+		console.log(`Waiting for connection result`);
+		if (this.state == LobbyConnectionStatus.Connected) return { status: this.state, reason: "Connected" };
+		else {
+			const res = await this.waitFor("connection_result");
+			console.log(res);
+			const [status, reason] = res;
+			return { status, reason };
+		}
 	}
 
-	public waitForMissionInfo(): Promise<MissionInfo> {
-		return new Promise<MissionInfo>((res) => {
-			if (this.mission) { res(this.mission); console.log(`Instant res mission!`, this.mission); }
-			else this.onMissionInfo = res;
-		});
+	public async waitForMissionInfo(): Promise<MissionInfo> {
+		if (this.mission) return this.mission;
+		else {
+			const res = await this.waitFor("mission_info");
+			return res[0];
+		}
 	}
 }
 
