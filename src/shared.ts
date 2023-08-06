@@ -94,6 +94,8 @@ interface MissionInfo {
 	workshopId: string;
 	mapId: string;
 	isBuiltin: boolean;
+	spawns: { name: string, id: number; }[];
+	allUnitSpawns: { name: string, id: number; }[];
 }
 
 interface RecordedLobbyInfo {
@@ -172,7 +174,7 @@ class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_messag
 
 	@RPC("in")
 	public UpdateMissionInfo(name: string, id: string, campaignId: string, workshopId: string, mapId: string, isBuiltin: boolean) {
-		this.mission = { name, id, campaignId, workshopId, mapId, isBuiltin };
+		this.mission = { name, id, campaignId, workshopId, mapId, isBuiltin, spawns: [], allUnitSpawns: [] };
 		this.emit("mission_info", this.mission);
 	}
 
@@ -237,7 +239,8 @@ enum UserScopes {
 }
 
 enum AuthType {
-	STEAM,
+	STEAM = "steam",
+	BYPASS = "bypass"
 }
 
 interface HCUser {
@@ -259,6 +262,13 @@ interface DbUserEntry {
 	lastUserObject: HCUser;
 }
 
+interface RecordedLobbyPacket {
+	id: string;
+	lobbyId: string;
+	timestamp: number;
+	type: "packet" | "event" | "init";
+	data: string;
+}
 
 export {
 	Vector3,
@@ -279,6 +289,7 @@ export {
 	Team,
 
 	RecordedLobbyInfo,
+	RecordedLobbyPacket,
 	VTGRDataChunk,
 	VTGRHeader,
 
