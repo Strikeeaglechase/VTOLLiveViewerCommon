@@ -87,16 +87,20 @@ type Packet = RPCPacket |
 	AssignID |
 	MultiRPCPacket;
 
-interface MissionInfo {
+interface MissionInfoWithoutSpawns {
 	name: string;
 	id: string;
 	campaignId: string;
 	workshopId: string;
 	mapId: string;
 	isBuiltin: boolean;
+}
+
+interface MissionInfo extends MissionInfoWithoutSpawns {
 	spawns: { name: string, id: number; }[];
 	allUnitSpawns: { name: string, id: number; }[];
 }
+
 
 interface RecordedLobbyInfo {
 	lobbyId: string;
@@ -147,13 +151,8 @@ class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_messag
 	public isPrivate = false;
 	public players: Player[] = [];
 	public isOpen = true;
-	public mission: MissionInfo | null = null;
+	public mission: MissionInfoWithoutSpawns | null = null;
 
-	// private onMissionInfo: ((mission: MissionInfo) => void) | null;
-	// private onConnectionResult: ((state: LobbyConnectionStatus, reason: string) => void) | null;
-	// public onLobbyEnd: (() => void) | null = null;
-	// public onLobbyRestart: (() => void) | null = null;
-	// public onLogMessage: ((message: string) => void) | null = null;
 	constructor(public id: string) {
 		super();
 		console.log(`VTOLLobby ${id} created`);
@@ -174,7 +173,7 @@ class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_messag
 
 	@RPC("in")
 	public UpdateMissionInfo(name: string, id: string, campaignId: string, workshopId: string, mapId: string, isBuiltin: boolean) {
-		this.mission = { name, id, campaignId, workshopId, mapId, isBuiltin, spawns: [], allUnitSpawns: [] };
+		this.mission = { name, id, campaignId, workshopId, mapId, isBuiltin };
 		this.emit("mission_info", this.mission);
 	}
 
@@ -221,7 +220,7 @@ class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_messag
 		}
 	}
 
-	public async waitForMissionInfo(): Promise<MissionInfo> {
+	public async waitForMissionInfo(): Promise<MissionInfoWithoutSpawns> {
 		if (this.mission) return this.mission;
 		else {
 			const res = await this.waitFor("mission_info");
@@ -283,6 +282,7 @@ export {
 	LobbyConnectionStatus,
 	LobbyConnectionResult,
 	MissionInfo,
+	MissionInfoWithoutSpawns,
 
 	Player,
 	RawPlayerInfo,
