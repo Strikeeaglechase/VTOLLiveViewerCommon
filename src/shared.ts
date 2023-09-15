@@ -137,6 +137,15 @@ interface VTGRHeader {
 	info: RecordedLobbyInfo;
 	id: string;
 	chunks: VTGRDataChunk[];
+	metadata?: VTGRMetadata;
+}
+
+interface VTGRMetadata {
+	id: string;
+	players: { name: string, id: string; }[];
+
+	netInstantiates: number;
+	totalPackets: number;
 }
 
 enum LobbyReadyState {
@@ -304,6 +313,7 @@ export {
 	RecordedLobbyPacket,
 	VTGRDataChunk,
 	VTGRHeader,
+	VTGRMetadata,
 
 	UserScopes,
 	AuthType,
