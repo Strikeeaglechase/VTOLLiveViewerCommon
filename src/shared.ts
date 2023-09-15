@@ -109,7 +109,7 @@ interface RecordedLobbyInfo {
 	missionId: string;
 	missionInfo: MissionInfo;
 	campaignId: string;
-	type: string;
+	workshopId: string;
 	map: string;
 	recordingId: string;
 	duration: number;
