@@ -139,15 +139,20 @@ interface VTGRHeader {
 	chunks: VTGRDataChunk[];
 }
 
+enum LobbyReadyState {
+	Ready,
+	NoMission
+}
 
 @EnableRPCs("instance")
-class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_message" | "mission_info" | "connection_result">{
+class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_message" | "mission_info" | "connection_result" | "lobby_ready_state">{
 	public name = "";
 	public missionName = "";
 	public playerCount = 0;
 	public maxPlayers = 0;
 	public isConnected = false;
 	public state: LobbyConnectionStatus = LobbyConnectionStatus.None;
+	public readyStatus: LobbyReadyState = LobbyReadyState.NoMission;
 	public isPrivate = false;
 	public players: Player[] = [];
 	public isOpen = true;
@@ -207,6 +212,12 @@ class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_messag
 	@RPC("in")
 	public LogMessage(message: string) {
 		this.emit("log_message", message);
+	}
+
+	@RPC("in")
+	public UpdateLobbyStatus(state: LobbyReadyState) {
+		this.readyStatus = state;
+		this.emit("lobby_ready_state", state);
 	}
 
 	public async waitForConnectionResult(): Promise<LobbyConnectionResult> {
@@ -281,6 +292,7 @@ export {
 	VTOLLobby,
 	LobbyConnectionStatus,
 	LobbyConnectionResult,
+	LobbyReadyState,
 	MissionInfo,
 	MissionInfoWithoutSpawns,
 
