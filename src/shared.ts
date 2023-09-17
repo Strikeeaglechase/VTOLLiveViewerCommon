@@ -114,6 +114,7 @@ interface RecordedLobbyInfo {
 	recordingId: string;
 	duration: number;
 	startTime: number;
+	metadata?: VTGRMetadata;
 }
 
 enum LobbyConnectionStatus {
@@ -137,7 +138,6 @@ interface VTGRHeader {
 	info: RecordedLobbyInfo;
 	id: string;
 	chunks: VTGRDataChunk[];
-	metadata?: VTGRMetadata;
 }
 
 interface VTGRMetadata {
