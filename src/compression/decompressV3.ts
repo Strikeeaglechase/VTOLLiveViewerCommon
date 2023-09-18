@@ -1,23 +1,21 @@
 import { RPCPacket } from "../rpc.js";
-import {
-	bitCheck, debug_decompress, decompressArgs, decompressInt, exactBytesToNum, PacketFlags
-} from "./vtcompression.js";
+import { bitCheck, debug_decompress, decompressArgs, decompressInt, exactBytesToNum, Index, PacketFlags } from "./vtcompression.js";
 
-export function decompressRpcPacketsV3(bytes: number[]) {
+export function decompressRpcPacketsV3(bytes: number[] | Buffer) {
 	if (bytes.length == 0) return [];
-	let idx = 0;
+	const index = new Index();
 
 	function read(amt = 1) {
-		const result = bytes.slice(idx, idx + amt);
-		idx += amt;
+		const result = bytes.slice(index.idx, index.idx + amt);
+		index.increment(amt);
 		return result;
 	}
 
 	function readOne() {
-		return read(1)[0];
+		return bytes[index.plusplus];
 	}
 
-	let version = readOne();
+	const version = readOne();
 	if (debug_decompress) console.log(`Version: ${version}`);
 
 	const numStrs = decompressInt(readOne);
@@ -26,18 +24,28 @@ export function decompressRpcPacketsV3(bytes: number[]) {
 	const getStrFromIdx = () => strings[decompressInt(readOne)];
 	for (let i = 0; i < numStrs; i++) {
 		const strLen = readOne();
-		const str = read(strLen).map(c => String.fromCharCode(c)).join('');
+		// const str = read(strLen)
+		// 	.map(c => String.fromCharCode(c))
+		// 	.join("");
+		// const strBytes = read(strLen);
+		// strings.push(str);
+		let str = "";
+		for (let j = 0; j < strLen; j++) {
+			str += String.fromCharCode(readOne());
+		}
+		// const str = Buffer.from(read(strLen)).toString("ascii");
 		strings.push(str);
 		if (debug_decompress) console.log(` #${i} - ${str}`);
 	}
 
 	// Get timestamp offset
-	const timestampOffset = exactBytesToNum(read(8));
+	const timestampOffset = exactBytesToNum(bytes, index);
+
 	if (debug_decompress) console.log(`Timestamp offset: ${timestampOffset}`);
 
 	// RPC Packet format: {classNameIdx} {methodNameIdx} {hasId} {idIdx} {arglen} [arg str]
 	// Read rpc packets
-	const numRpcPackets = version == -1 ? decompressInt(readOne) : exactBytesToNum(read(8));
+	const numRpcPackets = version == -1 ? decompressInt(readOne) : exactBytesToNum(bytes, index);
 	const rpcPackets: RPCPacket[] = [];
 	if (debug_decompress) console.log(`RPC Count: ${numRpcPackets}`);
 	for (let i = 0; i < numRpcPackets; i++) {
@@ -45,13 +53,12 @@ export function decompressRpcPacketsV3(bytes: number[]) {
 		const methodName = getStrFromIdx();
 		const packetFlags = readOne();
 
-
 		const idIsNum = bitCheck(packetFlags, PacketFlags.IdIsNumber);
 		const hasId = bitCheck(packetFlags, PacketFlags.HasId);
 		const hasTimestamp = bitCheck(packetFlags, PacketFlags.HasTimestamp);
 
 		if (debug_decompress) {
-			console.log(`RPC #${i} at ${idx}`);
+			console.log(`RPC #${i} at ${index}`);
 			console.log(` - Class: ${className}`);
 			console.log(` - Method: ${methodName}`);
 			console.log(` - idIsNum: ${idIsNum}`);
@@ -78,9 +85,13 @@ export function decompressRpcPacketsV3(bytes: number[]) {
 		if (debug_decompress) console.log(` - Arg len: ${argLen}`);
 		let args: unknown[] = [];
 		if (bitCheck(packetFlags, PacketFlags.BinBody)) {
-			args = decompressArgs(read(argLen));
+			args = decompressArgs(bytes, index, argLen); // read(argLen)
 		} else {
-			const argStr = read(argLen).map(c => String.fromCharCode(c)).join('');
+			let argStr = "";
+			for (let j = 0; j < argLen; j++) {
+				argStr += String.fromCharCode(readOne());
+			}
+			// const argStr = Buffer.from(read(argLen)).toString("ascii");
 			if (debug_decompress) console.log(` - Arg str: ${argStr}`);
 			args = JSON.parse(argStr);
 		}

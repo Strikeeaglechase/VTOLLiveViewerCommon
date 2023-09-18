@@ -9,6 +9,22 @@ import { decompressRpcPacketsV1 } from "./decompressV1.js";
 import { decompressRpcPacketsV2 } from "./decompressV2.js";
 import { decompressRpcPacketsV3 } from "./decompressV3.js";
 
+export class Index {
+	private value = 0;
+
+	public get idx() {
+		return this.value;
+	}
+
+	public get plusplus() {
+		return this.value++;
+	}
+
+	increment(amt = 1) {
+		this.value += amt;
+	}
+}
+
 export enum PacketFlags {
 	NoId = 0b00000001,
 	HasId = 0b00000010,
@@ -16,7 +32,7 @@ export enum PacketFlags {
 	BinBody = 0b00001000,
 	IdIsNumber = 0b00010000,
 	IdIsString = 0b00100000,
-	HasTimestamp = 0b01000000,
+	HasTimestamp = 0b01000000
 }
 
 export enum ArgumentType {
@@ -24,18 +40,22 @@ export enum ArgumentType {
 	Number = 0b00000010,
 	Boolean = 0b00000100,
 	Null = 0b00001000,
-	Vector = 0b00010000,
+	Vector = 0b00010000
 }
 
 export const bitCheck = (value: number, bit: number) => (value & bit) === bit;
 const isNum = (num?: string) => num != undefined && parseInt(num) < 2 ** 16 && num.split("").every(c => !isNaN(parseInt(c)));
-const filterAsciiStr = (str: string) => str.split("").filter(c => c.charCodeAt(0) < 256).join("");
+const filterAsciiStr = (str: string) =>
+	str
+		.split("")
+		.filter(c => c.charCodeAt(0) < 256)
+		.join("");
 
 function allArgsCanCompress(args: unknown[]) {
 	return args.every(arg => {
-		if (typeof arg === 'string') return true;
-		if (typeof arg === 'number') return true;
-		if (typeof arg === 'boolean') return true;
+		if (typeof arg === "string") return true;
+		if (typeof arg === "number") return true;
+		if (typeof arg === "boolean") return true;
 		if (arg === null) return true;
 		if (typeof arg == "object" && "x" in arg && "y" in arg && "z" in arg) return true;
 		return false;
@@ -48,9 +68,16 @@ function numToBytes(num: number) {
 	return new Uint8Array(f32.buffer);
 }
 
-function bytesToNum(bytes: number[]) {
-	const ui8 = new Uint8Array(bytes);
+// const f32 = new Float32Array(1);
+function bytesToNum(buf: number[] | Buffer, index: Index) {
+	// f32.buffer[0] = buf[index.idx + 0];
+	// f32.buffer[1] = buf[index.idx + 2];
+	// f32.buffer[2] = buf[index.idx + 3];
+	// f32.buffer[3] = buf[index.idx + 4];
+	const ui8 = new Uint8Array(buf.slice(index.idx, index.idx + 4));
 	const f32 = new Float32Array(ui8.buffer);
+	index.increment(4);
+
 	return f32[0];
 }
 
@@ -60,10 +87,21 @@ function exactNumToBytes(num: number) {
 	return new Uint8Array(i32.buffer);
 }
 
-export function exactBytesToNum(bytes: number[]) {
-	const ui8 = new Uint8Array(bytes);
-	const i32 = new Float64Array(ui8.buffer);
-	return i32[0];
+// const f64 = new Float64Array(1);
+export function exactBytesToNum(buf: number[] | Buffer, index: Index) {
+	// f64.buffer[0] = buf[index.idx + 0];
+	// f64.buffer[1] = buf[index.idx + 1];
+	// f64.buffer[2] = buf[index.idx + 2];
+	// f64.buffer[3] = buf[index.idx + 3];
+	// f64.buffer[4] = buf[index.idx + 4];
+	// f64.buffer[5] = buf[index.idx + 5];
+	// f64.buffer[6] = buf[index.idx + 6];
+	// f64.buffer[7] = buf[index.idx + 7];
+	const ui8 = new Uint8Array(buf.slice(index.idx, index.idx + 8));
+	const f64 = new Float64Array(ui8.buffer);
+	index.increment(8);
+	// console.log(f64);
+	return f64[0];
 }
 
 // If the number is <128 then store as one byte, otherwise two bytes, highest bit is used for indicating if the number is >127
@@ -74,7 +112,7 @@ function compressInt(num: number) {
 	if (num < 128) {
 		return [num];
 	} else {
-		return [0x80 | (num & 0x7F), num >> 7];
+		return [0x80 | (num & 0x7f), num >> 7];
 	}
 }
 
@@ -84,17 +122,18 @@ export function decompressInt(readOne: () => number) {
 		return first;
 	} else {
 		const second = readOne();
-		return (first & 0x7F) | (second << 7);
+		return (first & 0x7f) | (second << 7);
 	}
 }
 
-function compressArgs(args: unknown[], stat: (name: string, len: number) => void = () => { }) {
+// eslint-disable-next-line @typescript-eslint/no-empty-function
+function compressArgs(args: unknown[], stat: (name: string, len: number) => void = () => {}) {
 	const result: number[] = [];
 	args.forEach(arg => {
 		if (typeof arg == "string") {
 			const strArg = filterAsciiStr(arg);
 			result.push(ArgumentType.String, strArg.length);
-			result.push(...strArg.split('').map(c => c.charCodeAt(0)));
+			result.push(...strArg.split("").map(c => c.charCodeAt(0)));
 			stat("arg header", 2);
 			stat("arg string", strArg.length);
 			// console.log(`String: ${result.slice(-(arg.length + 2))}`);
@@ -113,7 +152,7 @@ function compressArgs(args: unknown[], stat: (name: string, len: number) => void
 			stat("arg header", 1);
 			// console.log(`Null: ${result.slice(-1)}`);
 		} else if (typeof arg == "object" && "x" in arg && "y" in arg && "z" in arg) {
-			const a = arg as { x: number, y: number, z: number; };
+			const a = arg as { x: number; y: number; z: number };
 			result.push(ArgumentType.Vector, ...numToBytes(a.x), ...numToBytes(a.y), ...numToBytes(a.z));
 			stat("arg header", 1);
 			stat("arg vector", 4 * 3);
@@ -124,48 +163,45 @@ function compressArgs(args: unknown[], stat: (name: string, len: number) => void
 	return result;
 }
 
-export function decompressArgs(values: number[]) {
+export function decompressArgs(values: number[] | Buffer, index: Index, length: number) {
 	if (debug_decompress) console.log(` - Arg data: ${values.join(" ")}`);
 	const result: unknown[] = [];
-	let i = 0;
-	while (i < values.length) {
-		const type = values[i++];
+	// let i = 0;
+	const endPoint = index.idx + length;
+	while (index.idx < endPoint) {
+		const type = values[index.plusplus];
 		switch (type) {
 			case ArgumentType.String: {
-				const len = values[i++];
-				const str = String.fromCharCode(...values.slice(i, i + len));
-				i += len;
+				const len = values[index.plusplus];
+				const str = String.fromCharCode(...values.slice(index.idx, index.idx + len));
+				index.increment(len);
 				result.push(str);
-				if (debug_decompress) console.log(`  - Arg(${i - len}): String(${len})  ${str}`);
+				// if (debug_decompress) console.log(`  - Arg(${i - len}): String(${len})  ${str}`);
 				break;
 			}
 			case ArgumentType.Number: {
-				const num = bytesToNum(values.slice(i, i + 4));
-				i += 4;
+				const num = bytesToNum(values, index);
 				result.push(num);
-				if (debug_decompress) console.log(`  - Arg(${i - 4}): Number(4)  ${num}`);
+				// if (debug_decompress) console.log(`  - Arg(${i - 4}): Number(4)  ${num}`);
 				break;
 			}
 			case ArgumentType.Boolean: {
-				const bool = values[i++] === 1;
+				const bool = values[index.plusplus] === 1;
 				result.push(bool);
-				if (debug_decompress) console.log(`  - Arg(${i - 1}): Boolean(1)  ${bool}`);
+				// if (debug_decompress) console.log(`  - Arg(${i - 1}): Boolean(1)  ${bool}`);
 				break;
 			}
 			case ArgumentType.Null: {
 				result.push(null);
-				if (debug_decompress) console.log(`  - Arg(${i - 1}): Null`);
+				// if (debug_decompress) console.log(`  - Arg(${i - 1}): Null`);
 				break;
 			}
 			case ArgumentType.Vector: {
-				const x = bytesToNum(values.slice(i, i + 4));
-				i += 4;
-				const y = bytesToNum(values.slice(i, i + 4));
-				i += 4;
-				const z = bytesToNum(values.slice(i, i + 4));
-				i += 4;
+				const x = bytesToNum(values, index);
+				const y = bytesToNum(values, index);
+				const z = bytesToNum(values, index);
 				result.push({ x, y, z });
-				if (debug_decompress) console.log(`  - Arg(${i - (4 * 3)}): Vector(12)  ${x}, ${y}, ${z}`);
+				// if (debug_decompress) console.log(`  - Arg(${i - 4 * 3}): Vector(12)  ${x}, ${y}, ${z}`);
 				break;
 			}
 			default:
@@ -214,7 +250,7 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 				const allowedName = reasonName.substring(0, nums.length - 2);
 				const padLeft = Math.floor((nums.length - 2 - allowedName.length) / 2);
 				const padRight = nums.length - 2 - allowedName.length - padLeft;
-				packetStructureDebug += "[" + ("-".repeat(padLeft)) + allowedName + ("-".repeat(padRight)) + "]";
+				packetStructureDebug += "[" + "-".repeat(padLeft) + allowedName + "-".repeat(padRight) + "]";
 			}
 		}
 
@@ -227,7 +263,6 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 		});
 	};
 
-
 	if (rpcPackets[0].timestamp && includeTimestamps) {
 		if (!rpcPackets.every(p => p.timestamp)) {
 			console.log(JSON.stringify(rpcPackets));
@@ -236,7 +271,6 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 			rpcPackets = rpcPackets.sort((a, b) => a.timestamp! - b.timestamp!);
 		}
 	}
-
 
 	// Format
 	// {version} {num strs} {str1len} [str1] {str2len} [str2] ...
@@ -259,7 +293,7 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 	strings.forEach(string => {
 		const str = filterAsciiStr(string);
 		push("header-string-len", str.length);
-		push("header-string", ...str.split('').map(c => c.charCodeAt(0)));
+		push("header-string", ...str.split("").map(c => c.charCodeAt(0)));
 	});
 
 	if (strings.length > 2 ** 16) throw new Error(`Too many strings (${strings.length})`);
@@ -281,11 +315,11 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 	rpcPackets.forEach(packet => {
 		const argCompress = allArgsCanCompress(packet.args);
 		const idIsNum = isNum(packet.id);
-		const packetFlags = (packet.id ? PacketFlags.HasId : PacketFlags.NoId) |
+		const packetFlags =
+			(packet.id ? PacketFlags.HasId : PacketFlags.NoId) |
 			(argCompress ? PacketFlags.BinBody : PacketFlags.JSONBody) |
 			(idIsNum ? PacketFlags.IdIsNumber : PacketFlags.IdIsString) |
-			((packet.timestamp && includeTimestamps) ? PacketFlags.HasTimestamp : 0);
-
+			(packet.timestamp && includeTimestamps ? PacketFlags.HasTimestamp : 0);
 
 		push("class-name", ...strIdx(packet.className.toString()));
 		push("method", ...strIdx(packet.method.toString()));
@@ -305,13 +339,13 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 		} else {
 			const argStr = filterAsciiStr(JSON.stringify(packet.args));
 			if (argStr.length > 2 ** 16) throw new Error(`JSON Argument string too long (${argStr.length})`);
-			push("json-args", ...compressInt(argStr.length), ...argStr.split('').map(c => c.charCodeAt(0)));
+			push("json-args", ...compressInt(argStr.length), ...argStr.split("").map(c => c.charCodeAt(0)));
 		}
 	});
 
 	if (debug_packet_structure) {
 		packetStructureDebug += "\n\n";
-		for (let key in packetStructureDebugAliases) {
+		for (const key in packetStructureDebugAliases) {
 			packetStructureDebug += ` ${packetStructureDebugAliases[key]} -> ${key}\n`;
 		}
 
@@ -321,23 +355,24 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 	return result;
 }
 
-
-type Decompressor = (bytes: number[]) => RPCPacket[];
+type Decompressor = (bytes: number[] | Buffer) => RPCPacket[];
 
 const decompressVersions: Decompressor[] = [
+	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-ignore
-	() => { },
+	// eslint-disable-next-line @typescript-eslint/no-empty-function
+	() => {},
 	decompressRpcPacketsV1,
 	decompressRpcPacketsV2,
-	decompressRpcPacketsV3,
+	decompressRpcPacketsV3
 ];
 
-function decompressRpcPackets(bytes: number[]) {
+function decompressRpcPackets(bytes: number[] | Buffer) {
 	if (bytes.length == 0) return [];
 	const version = bytes[0];
 	if (version < 1 || version >= decompressVersions.length) {
 		console.error(`Invalid version for decompress, expected 1-${decompressVersions.length}, got ${version}`);
-		console.error(`Data:`);
+		// console.error(`Data:`);
 		// console.error("[" + bytes.join(",") + "]");
 		return [];
 	}
