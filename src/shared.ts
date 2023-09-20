@@ -5,13 +5,15 @@
 import { EventEmitter } from "./eventEmitter.js";
 import { EnableRPCs, RPC, RPCPacket } from "./rpc.js";
 
-interface PacketBase { type: PacketType; }
+interface PacketBase {
+	type: PacketType;
+}
 
 // TODO: Remove strings from RPC calls
 enum PacketType {
 	rpcPacket = "rpcPacket",
 	assignId = "assignId",
-	multiRpc = "multiRpc",
+	multiRpc = "multiRpc"
 }
 
 enum Team {
@@ -61,7 +63,6 @@ class Player implements RawPlayerInfo {
 	});
 }
 
-
 // interface RPCPacket {
 // 	[x: string]: any;
 // 	className: string;
@@ -83,9 +84,7 @@ interface MultiRPCPacket {
 	type: PacketType.multiRpc;
 }
 
-type Packet = RPCPacket |
-	AssignID |
-	MultiRPCPacket;
+type Packet = RPCPacket | AssignID | MultiRPCPacket;
 
 interface MissionInfoWithoutSpawns {
 	name: string;
@@ -97,10 +96,11 @@ interface MissionInfoWithoutSpawns {
 }
 
 interface MissionInfo extends MissionInfoWithoutSpawns {
-	spawns: { name: string, id: number; }[];
-	allUnitSpawns: { name: string, id: number; }[];
+	spawns: { name: string; id: number }[];
+	allUnitSpawns: { name: string; id: number }[];
+	waypoints: { name: string; id: number; position: Vector3 }[];
+	bullseye: Record<Team, number>;
 }
-
 
 interface RecordedLobbyInfo {
 	lobbyId: string;
@@ -121,7 +121,7 @@ enum LobbyConnectionStatus {
 	None,
 	Connecting,
 	Invalid,
-	Connected,
+	Connected
 }
 
 interface LobbyConnectionResult {
@@ -142,7 +142,7 @@ interface VTGRHeader {
 
 interface VTGRMetadata {
 	id: string;
-	players: { name: string, id: string; }[];
+	players: { name: string; id: string }[];
 
 	netInstantiates: number;
 	totalPackets: number;
@@ -154,7 +154,7 @@ enum LobbyReadyState {
 }
 
 @EnableRPCs("instance")
-class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_message" | "mission_info" | "connection_result" | "lobby_ready_state">{
+class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_message" | "mission_info" | "connection_result" | "lobby_ready_state"> {
 	public name = "";
 	public missionName = "";
 	public playerCount = 0;
@@ -173,7 +173,15 @@ class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_messag
 	}
 
 	@RPC("in")
-	public UpdateLobbyInfo(name: string, missionName: string, playerCount: number, maxPlayers: number, isPrivate: boolean, isConnected: boolean, players: RawPlayerInfo[]) {
+	public UpdateLobbyInfo(
+		name: string,
+		missionName: string,
+		playerCount: number,
+		maxPlayers: number,
+		isPrivate: boolean,
+		isConnected: boolean,
+		players: RawPlayerInfo[]
+	) {
 		this.name = name;
 		this.missionName = missionName;
 		this.playerCount = playerCount;
@@ -249,12 +257,10 @@ class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_messag
 	}
 }
 
-
-
 enum UserScopes {
 	ALPHA_ACCESS = "alpha_access",
 	USER = "user",
-	ADMIN = "admin",
+	ADMIN = "admin"
 }
 
 enum AuthType {
@@ -291,32 +297,27 @@ interface RecordedLobbyPacket {
 
 export {
 	Vector3,
-
 	Packet,
 	PacketBase,
 	PacketType,
 	MultiRPCPacket,
 	AssignID,
-
 	VTOLLobby,
 	LobbyConnectionStatus,
 	LobbyConnectionResult,
 	LobbyReadyState,
 	MissionInfo,
 	MissionInfoWithoutSpawns,
-
 	Player,
 	RawPlayerInfo,
 	Team,
-
 	RecordedLobbyInfo,
 	RecordedLobbyPacket,
 	VTGRDataChunk,
 	VTGRHeader,
 	VTGRMetadata,
-
 	UserScopes,
 	AuthType,
 	HCUser,
-	DbUserEntry,
+	DbUserEntry
 };
