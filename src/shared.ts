@@ -290,6 +290,7 @@ interface DbUserEntry {
 interface RecordedLobbyPacket {
 	id: string;
 	lobbyId: string;
+	recordingId: string;
 	timestamp: number;
 	type: "packet" | "event" | "init";
 	data: string;
