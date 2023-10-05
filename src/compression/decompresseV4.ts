@@ -10,13 +10,17 @@ function exactBytesToNum(buf: number[] | Buffer, index: Index) {
 }
 
 function decompressInt(readOne: () => number) {
-	const first = readOne();
-	if (first < 128) {
-		return first;
-	} else {
-		const second = readOne();
-		return (first & 0x7f) | (second << 7);
+	let result = 0;
+	let index = 0;
+	while (index < 50) {
+		const next = readOne();
+		const bits = next & 0b01111111;
+		result = result + (bits << (7 * index));
+		if ((next & 0b10000000) == 0) break;
+		index++;
 	}
+
+	return result;
 }
 
 function bytesToNum(buf: number[] | Buffer, index: Index) {
@@ -77,7 +81,7 @@ function decompressArgs(values: number[] | Buffer, index: Index, length: number)
 	return result;
 }
 
-export function decompressRpcPacketsV3(bytes: number[] | Buffer) {
+export function decompressRpcPacketsV4(bytes: number[] | Buffer) {
 	if (bytes.length == 0) return [];
 	const index = new Index();
 
@@ -173,7 +177,7 @@ export function decompressRpcPacketsV3(bytes: number[] | Buffer) {
 	return rpcPackets;
 }
 
-export function* decompressRpcPacketsV3Gen(bytes: number[] | Buffer) {
+export function* decompressRpcPacketsV4Gen(bytes: number[] | Buffer) {
 	if (bytes.length == 0) return [];
 	const index = new Index();
 
