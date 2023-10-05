@@ -5,8 +5,6 @@ export const debug_decompress = false;
 export const debug_compress = false;
 export const debug_packet_structure = false;
 import { RPCPacket } from "../rpc.js";
-import { decompressRpcPacketsV1 } from "./decompressV1.js";
-import { decompressRpcPacketsV2 } from "./decompressV2.js";
 import { decompressRpcPacketsV3, decompressRpcPacketsV3Gen } from "./decompressV3.js";
 
 export class Index {
@@ -361,7 +359,7 @@ type GenDecompressor = (bytes: number[] | Buffer) => Generator<RPCPacket, void, 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 // eslint-disable-next-line @typescript-eslint/no-empty-function
-const decompressVersions: Decompressor[] = [() => {}, decompressRpcPacketsV1, decompressRpcPacketsV2, decompressRpcPacketsV3];
+const decompressVersions: Decompressor[] = [() => {}, () => {}, () => {}, decompressRpcPacketsV3];
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
