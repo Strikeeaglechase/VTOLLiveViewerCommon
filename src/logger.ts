@@ -5,14 +5,14 @@ const LOG_PATH_BASE = "../logs/";
 enum LoggerLevel {
 	INFO = 0,
 	WARNING = 1,
-	ERROR = 2,
+	ERROR = 2
 }
 
 type LogFormatter = (timestamp: string, message: string, level: LoggerLevel, forFile: boolean) => string;
 
 function extractSections(logMessage: string): string[] {
 	const sections = logMessage.match(/\[.*?\]/g) || [];
-	const message = logMessage.replace(/\[.*?\]/g, '').trim();
+	const message = logMessage.replace(/\[.*?\]/g, "").trim();
 	return [...sections, message];
 }
 
@@ -31,7 +31,7 @@ class Logger {
 
 		const formatter = (color: (...text: unknown[]) => string) => (timestamp: string, message: string, level: LoggerLevel, forFile: boolean) => {
 			let pad = " ";
-			if (message.startsWith("[")) pad = "";
+			if (message?.startsWith("[")) pad = "";
 			if (forFile) return `[${timestamp}][${LoggerLevel[level]}]${pad}${message}`;
 			return `[${timestamp}]` + color(`[${LoggerLevel[level]}]${pad}${message}`);
 		};
@@ -39,13 +39,13 @@ class Logger {
 		this.formatters = {
 			[LoggerLevel.INFO]: formatter(chalk.blue),
 			[LoggerLevel.WARNING]: formatter(chalk.yellow),
-			[LoggerLevel.ERROR]: formatter(chalk.red),
+			[LoggerLevel.ERROR]: formatter(chalk.red)
 		};
 	}
 
 	public static configureFormatter(level: LoggerLevel | LoggerLevel[], formatter: LogFormatter) {
 		if (Array.isArray(level)) {
-			level.forEach(l => Logger.instance.formatters[l] = formatter);
+			level.forEach(l => (Logger.instance.formatters[l] = formatter));
 		} else {
 			Logger.instance.formatters[level] = formatter;
 		}
@@ -107,10 +107,18 @@ class Logger {
 
 		let logMethod: (message: string) => void;
 		switch (level) {
-			case "[INFO]": logMethod = Logger.info; break;
-			case "[WARN]": logMethod = Logger.warn; break;
-			case "[ERROR]": logMethod = Logger.error; break;
-			default: logMethod = Logger.info; break;
+			case "[INFO]":
+				logMethod = Logger.info;
+				break;
+			case "[WARN]":
+				logMethod = Logger.warn;
+				break;
+			case "[ERROR]":
+				logMethod = Logger.error;
+				break;
+			default:
+				logMethod = Logger.info;
+				break;
 		}
 
 		logMethod(`[HC]${lobbyId} ${message}`);
