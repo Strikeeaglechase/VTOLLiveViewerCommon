@@ -32,7 +32,7 @@ function bytesToNum(buf: number[] | Buffer, index: Index) {
 }
 
 function decompressArgs(values: number[] | Buffer, index: Index, length: number) {
-	if (debug_decompress) console.log(` - Arg data: ${values.join(" ")}`);
+	// if (debug_decompress) console.log(` - Arg data: ${values.join(" ")}`);
 	const result: unknown[] = [];
 	// let i = 0;
 	const endPoint = index.idx + length;

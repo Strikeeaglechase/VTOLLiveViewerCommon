@@ -17,6 +17,10 @@ export class Index {
 	increment(amt = 1) {
 		this.value += amt;
 	}
+
+	toString() {
+		return this.value.toString();
+	}
 }
 
 export enum PacketFlags {

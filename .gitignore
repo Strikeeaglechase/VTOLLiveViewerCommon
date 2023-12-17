@@ -1,4 +1,5 @@
 *.bin
+test-*
 # Logs
 logs
 *.log

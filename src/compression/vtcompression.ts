@@ -33,6 +33,7 @@ function decompressRpcPackets(bytes: number[] | Buffer) {
 
 	try {
 		const decompressor = decompressVersions[version];
+		if (debug_decompress) console.log(`Decompressing version ${version}`);
 		return decompressor(bytes);
 	} catch (e) {
 		console.error(`Decompression error on packet with ${bytes.length} bytes version ${version}`);
@@ -59,6 +60,7 @@ function decompressRpcPacketsGen(bytes: number[] | Buffer) {
 
 	try {
 		const decompressor = decompressGenVersions[version];
+		if (debug_decompress) console.log(`Decompressing version ${version}`);
 		return decompressor(bytes);
 	} catch (e) {
 		console.error(`Decompression error on packet with ${bytes.length} bytes version ${version}`);
