@@ -4,7 +4,6 @@ interface IVector3 {
 	z: number;
 }
 
-
 function isVector(v: any): v is IVector3 {
 	return typeof v == "object" && v.x != null && v.y != null && v.x != null;
 }
@@ -72,11 +71,7 @@ class Vector implements IVector3 {
 	}
 
 	cross(v: IVector3): Vector {
-		return new Vector(
-			this.y * v.z - this.z * v.y,
-			this.z * v.x - this.x * v.z,
-			this.x * v.y - this.y * v.x
-		);
+		return new Vector(this.y * v.z - this.z * v.y, this.z * v.x - this.x * v.z, this.x * v.y - this.y * v.x);
 	}
 
 	length(): number {
@@ -99,7 +94,7 @@ class Vector implements IVector3 {
 		return Math.max(Math.max(this.x, this.y), this.z);
 	}
 
-	toAngles(): { theta: number; phi: number; } {
+	toAngles(): { theta: number; phi: number } {
 		return {
 			theta: Math.atan2(this.z, this.x),
 			phi: Math.asin(this.y / this.length())
@@ -123,7 +118,9 @@ class Vector implements IVector3 {
 	}
 
 	init(x: number, y: number, z: number): this {
-		this.x = x; this.y = y; this.z = z;
+		this.x = x;
+		this.y = y;
+		this.z = z;
 		return this;
 	}
 
@@ -132,27 +129,37 @@ class Vector implements IVector3 {
 	}
 
 	static negative<T extends IVector3>(a: IVector3, b: T): T {
-		b.x = -a.x; b.y = -a.y; b.z = -a.z;
+		b.x = -a.x;
+		b.y = -a.y;
+		b.z = -a.z;
 		return b;
 	}
 
 	static add<T extends IVector3>(a: IVector3, b: IVector3, c: T): T {
-		c.x = a.x + b.x; c.y = a.y + b.y; c.z = a.z + b.z;
+		c.x = a.x + b.x;
+		c.y = a.y + b.y;
+		c.z = a.z + b.z;
 		return c;
 	}
 
 	static subtract<T extends IVector3>(a: IVector3, b: IVector3, c: T): T {
-		c.x = a.x - b.x; c.y = a.y - b.y; c.z = a.z - b.z;
+		c.x = a.x - b.x;
+		c.y = a.y - b.y;
+		c.z = a.z - b.z;
 		return c;
 	}
 
 	static multiply<T extends IVector3>(a: IVector3, b: IVector3, c: T): T {
-		c.x = a.x * b.x; c.y = a.y * b.y; c.z = a.z * b.z;
+		c.x = a.x * b.x;
+		c.y = a.y * b.y;
+		c.z = a.z * b.z;
 		return c;
 	}
 
 	static divide<T extends IVector3>(a: IVector3, b: IVector3, c: T): T {
-		c.x = a.x / b.x; c.y = a.y / b.y; c.z = a.z / b.z;
+		c.x = a.x / b.x;
+		c.y = a.y / b.y;
+		c.z = a.z / b.z;
 		return c;
 	}
 

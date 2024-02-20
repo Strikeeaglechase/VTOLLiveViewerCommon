@@ -5,30 +5,30 @@
 import { EventEmitter } from "./eventEmitter.js";
 import { EnableRPCs, RPC, RPCPacket } from "./rpc.js";
 
-interface PacketBase {
+export interface PacketBase {
 	type: PacketType;
 }
 
 // TODO: Remove strings from RPC calls
-enum PacketType {
+export enum PacketType {
 	rpcPacket = "rpcPacket",
 	assignId = "assignId",
 	multiRpc = "multiRpc"
 }
 
-enum Team {
+export enum Team {
 	A,
 	B,
 	Unknown
 }
 
-interface Vector3 {
+export interface Vector3 {
 	x: number;
 	y: number;
 	z: number;
 }
 
-interface RawPlayerInfo {
+export interface RawPlayerInfo {
 	steamId: string;
 	pilotName: string;
 	slot: number;
@@ -37,7 +37,7 @@ interface RawPlayerInfo {
 	unitId: number;
 }
 
-class Player implements RawPlayerInfo {
+export class Player implements RawPlayerInfo {
 	public steamId: string;
 	public pilotName: string;
 	public slot: number;
@@ -63,30 +63,19 @@ class Player implements RawPlayerInfo {
 	});
 }
 
-// interface RPCPacket {
-// 	[x: string]: any;
-// 	className: string;
-// 	method: string;
-// 	args: any[];
-// 	id?: string;
-// 	gameId?: string;
-// 	pid?: number;
-// 	// type: PacketType.rpcPacket;
-// }
-
-interface AssignID {
+export interface AssignID {
 	id: string;
 	type: PacketType.assignId;
 }
 
-interface MultiRPCPacket {
+export interface MultiRPCPacket {
 	packets: RPCPacket[];
 	type: PacketType.multiRpc;
 }
 
-type Packet = RPCPacket | AssignID | MultiRPCPacket;
+export type Packet = RPCPacket | AssignID | MultiRPCPacket;
 
-interface MissionInfoWithoutSpawns {
+export interface MissionInfoWithoutSpawns {
 	name: string;
 	id: string;
 	campaignId: string;
@@ -95,14 +84,14 @@ interface MissionInfoWithoutSpawns {
 	isBuiltin: boolean;
 }
 
-interface MissionInfo extends MissionInfoWithoutSpawns {
+export interface MissionInfo extends MissionInfoWithoutSpawns {
 	spawns: { name: string; id: number }[];
 	allUnitSpawns: { name: string; id: number }[];
 	waypoints: { name: string; id: number; position: Vector3 }[];
 	bullseye: Record<Team, number>;
 }
 
-interface RecordedLobbyInfo {
+export interface RecordedLobbyInfo {
 	lobbyId: string;
 	lobbyName: string;
 	missionName: string;
@@ -117,30 +106,30 @@ interface RecordedLobbyInfo {
 	metadata?: VTGRMetadata;
 }
 
-enum LobbyConnectionStatus {
+export enum LobbyConnectionStatus {
 	None,
 	Connecting,
 	Invalid,
 	Connected
 }
 
-interface LobbyConnectionResult {
+export interface LobbyConnectionResult {
 	status: LobbyConnectionStatus;
 	reason: string;
 }
 
-interface VTGRDataChunk {
+export interface VTGRDataChunk {
 	start: number;
 	length: number;
 }
 
-interface VTGRHeader {
+export interface VTGRHeader {
 	info: RecordedLobbyInfo;
 	id: string;
 	chunks: VTGRDataChunk[];
 }
 
-interface VTGRMetadata {
+export interface VTGRMetadata {
 	id: string;
 	players: { name: string; id: string }[];
 
@@ -148,13 +137,13 @@ interface VTGRMetadata {
 	totalPackets: number;
 }
 
-enum LobbyReadyState {
+export enum LobbyReadyState {
 	Ready,
 	NoMission
 }
 
 @EnableRPCs("instance")
-class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_message" | "mission_info" | "connection_result" | "lobby_ready_state"> {
+export class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_message" | "mission_info" | "connection_result" | "lobby_ready_state"> {
 	public name = "";
 	public missionName = "";
 	public playerCount = 0;
@@ -257,18 +246,18 @@ class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_messag
 	}
 }
 
-enum UserScopes {
+export enum UserScopes {
 	ALPHA_ACCESS = "alpha_access",
 	USER = "user",
 	ADMIN = "admin"
 }
 
-enum AuthType {
+export enum AuthType {
 	STEAM = "steam",
 	BYPASS = "bypass"
 }
 
-interface HCUser {
+export interface HCUser {
 	id: string;
 	username: string;
 	authType: AuthType;
@@ -279,7 +268,7 @@ interface HCUser {
 	iat?: number;
 }
 
-interface DbUserEntry {
+export interface DbUserEntry {
 	id: string;
 	scopes: UserScopes[];
 	lastLoginTime: number;
@@ -287,7 +276,7 @@ interface DbUserEntry {
 	lastUserObject: HCUser;
 }
 
-interface RecordedLobbyPacket {
+export interface RecordedLobbyPacket {
 	id: string;
 	lobbyId: string;
 	recordingId: string;
@@ -296,29 +285,10 @@ interface RecordedLobbyPacket {
 	data: string;
 }
 
-export {
-	Vector3,
-	Packet,
-	PacketBase,
-	PacketType,
-	MultiRPCPacket,
-	AssignID,
-	VTOLLobby,
-	LobbyConnectionStatus,
-	LobbyConnectionResult,
-	LobbyReadyState,
-	MissionInfo,
-	MissionInfoWithoutSpawns,
-	Player,
-	RawPlayerInfo,
-	Team,
-	RecordedLobbyInfo,
-	RecordedLobbyPacket,
-	VTGRDataChunk,
-	VTGRHeader,
-	VTGRMetadata,
-	UserScopes,
-	AuthType,
-	HCUser,
-	DbUserEntry
-};
+export interface ServiceCallMetrics {
+	className: string;
+	methodName: string;
+	count: number;
+	totalPing: number;
+	data: number;
+}
