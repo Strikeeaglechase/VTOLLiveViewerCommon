@@ -46,7 +46,7 @@ const useStringHash = false;
 
 class RPCController {
 	static instance: RPCController = new RPCController();
-	private constructor() { }
+	private constructor() {}
 
 	private newInRpcs: RPCHandler[] = [];
 	private rpcs: RPCHandler[] = [];
@@ -78,10 +78,10 @@ class RPCController {
 		this.instance.permissionProvider = provider;
 	}
 
-	public registerRPCHandler<T extends { new(...args: any[]): {}; }>(constructor: T, mode: RPCMode, altNames: string[] = []) {
+	public registerRPCHandler<T extends { new (...args: any[]): {} }>(constructor: T, mode: RPCMode, altNames: string[] = []) {
 		const defaultName = constructor.name;
 		const name = useStringHash ? hashCode(defaultName) : defaultName;
-		altNames.forEach(altName => this.multiNameLut[altName] = name);
+		altNames.forEach(altName => (this.multiNameLut[altName] = name));
 		if (mode != "static") {
 			const self = this;
 			constructor = class extends constructor {
@@ -153,17 +153,15 @@ class RPCController {
 			className: targetName,
 			method: propertyKey,
 			args: args,
-			id: id,
+			id: id
 		};
 
 		if (this.useRpcPooling) {
 			this.rpcSendPool.push(packet);
-		}
-		else {
+		} else {
 			// @ts-ignore
 			this.sendHandler(packet);
 		}
-
 	}
 
 	static flush() {
@@ -188,7 +186,6 @@ class RPCController {
 
 			return;
 		}
-
 
 		let packet = message as RPCPacket;
 		try {
@@ -245,6 +242,11 @@ class RPCController {
 			}
 		}
 	}
+
+	static getRpcHandler(className: string, instanceId: string) {
+		const instance = this.instance.instances[className]?.find(i => i.id == instanceId);
+		return instance;
+	}
 }
 
 function EnableRPCs(mode: RPCMode = "singleInstance", altNames?: string[]) {
@@ -260,11 +262,4 @@ function RPC(direction: "in" | "out"): DecoratorReturn {
 	};
 }
 
-export {
-	RPCMode,
-	RPCHandler,
-	RPCPacket,
-	RPCController,
-	EnableRPCs,
-	RPC
-};
+export { RPCMode, RPCHandler, RPCPacket, RPCController, EnableRPCs, RPC };
