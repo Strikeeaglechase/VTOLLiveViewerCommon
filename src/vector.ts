@@ -113,6 +113,10 @@ class Vector implements IVector3 {
 		return [this.x, this.y, this.z];
 	}
 
+	toString() {
+		return `(${this.x}, ${this.y}, ${this.z})`;
+	}
+
 	clone(): Vector {
 		return new Vector(this.x, this.y, this.z);
 	}
