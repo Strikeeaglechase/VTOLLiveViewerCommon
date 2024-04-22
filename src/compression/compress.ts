@@ -42,7 +42,14 @@ export enum ArgumentType {
 }
 
 export const bitCheck = (value: number, bit: number) => (value & bit) === bit;
-const isNum = (num?: string) => num != undefined && parseInt(num) < 2 ** maxBitsPerInt && num.split("").every(c => !isNaN(parseInt(c)));
+const isNum = (num?: string | number) =>
+	num != undefined &&
+	parseInt(num.toString()) < 2 ** maxBitsPerInt &&
+	num
+		.toString()
+		.split("")
+		.every(c => !isNaN(parseInt(c)));
+
 const filterAsciiStr = (str: string) =>
 	str
 		.split("")

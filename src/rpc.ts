@@ -49,13 +49,15 @@ class RPCController {
 	private constructor() {}
 
 	private newInRpcs: RPCHandler[] = [];
-	private rpcs: RPCHandler[] = [];
+	private _rpcs: RPCHandler[] = [];
+	private rpcs: Record<string, RPCHandler> = {};
 
 	private sendHandler: ((packet: RPCPacket) => void) | ((packet: Uint8Array) => void);
 	private permissionProvider: PermissionProvider;
 
 	private singleInstances: Record<string | number, any> = {};
-	private instances: Record<string | number, any[]> = {};
+	private instancesWithoutId: any[] = [];
+	private instances: Record<string | number, Record<string, any>> = {};
 	private multiNameLut: Record<string, string> = {};
 	private useRpcPooling = false;
 	private rpcSendPool: RPCPacket[] = [];
@@ -93,8 +95,11 @@ class RPCController {
 					if (mode == "singleInstance") {
 						self.singleInstances[name] = this;
 					} else {
-						if (!self.instances[name]) self.instances[name] = [];
-						self.instances[name].push(this);
+						if (!self.instances[name]) self.instances[name] = {};
+						// if (!this["id"]) throw new Error("Instance must have an id property on construction");
+						// self.instances[name].push(this);
+						// self.instances[name][this["id"]] = this;
+						self.instancesWithoutId.push(this);
 					}
 				}
 			};
@@ -104,7 +109,11 @@ class RPCController {
 			rpc.type = mode;
 		});
 		console.log(`Registered ${mode} RPCs on ${defaultName}${this.newInRpcs.map(r => `\n\t- ${r.name}`)}`);
-		this.rpcs.push(...this.newInRpcs);
+		// this.rpcs.push(...this.newInRpcs);
+		this.newInRpcs.forEach(rpc => {
+			const key = `${rpc.target}.${rpc.name}`;
+			this.rpcs[key] = rpc;
+		});
 		this.newInRpcs = [];
 
 		return constructor;
@@ -114,18 +123,27 @@ class RPCController {
 		// Check to find it as a single instance
 		const singleInstance = Object.entries(this.instance.singleInstances).find(i => i[1] == instance);
 		if (singleInstance) {
-			const preFilter = this.instance.rpcs.length;
-			this.instance.rpcs = this.instance.rpcs.filter(rpc => rpc.target != singleInstance[0]);
-			console.log(`Deregistered ${singleInstance[0]} and got rid of ${preFilter - this.instance.rpcs.length} RPCs`);
-			return;
+			// const preFilter = this.instance.rpcs.length;
+			// this.instance.rpcs = this.instance.rpcs.filter(rpc => rpc.target != singleInstance[0]);
+			// console.log(`Deregistered ${singleInstance[0]} and got rid of ${preFilter - this.instance.rpcs.length} RPCs`);
+			// return;
+			throw new Error("Deregistering single instances is not supported yet");
 		}
 
-		const multiInstance = Object.entries(this.instance.instances).find(i => i[1].includes(instance));
-		if (multiInstance) {
-			console.log(`Deregistered ${multiInstance[0]}#${instance.id}`);
-			this.instance.instances[multiInstance[0]] = multiInstance[1].filter(i => i != instance);
-			return;
+		for (const instanceList of Object.values(this.instance.instances)) {
+			for (const i in instanceList) {
+				if (instanceList[i] == instance) {
+					delete instanceList[i];
+					console.log(`Deregistered ${instanceList[i].__name}#${i}`);
+				}
+			}
 		}
+		// const multiInstance = Object.entries(this.instance.instances).find(i => i[1].includes(instance));
+		// if (multiInstance) {
+		// 	console.log(`Deregistered ${multiInstance[0]}#${instance.id}`);
+		// 	this.instance.instances[multiInstance[0]] = multiInstance[1].filter(i => i != instance);
+		// 	return;
+		// }
 	}
 
 	public registerRpc(target: any, propertyKey: string, descriptor: PropertyDescriptor, direction: "in" | "out"): PropertyDescriptor {
@@ -155,6 +173,7 @@ class RPCController {
 			args: args,
 			id: id
 		};
+		// console.log(packet);
 
 		if (this.useRpcPooling) {
 			this.rpcSendPool.push(packet);
@@ -171,16 +190,29 @@ class RPCController {
 		this.instance.sendHandler(new Uint8Array(compressed));
 	}
 
+	static checkInstancesWithoutIds() {
+		if (this.instance.instancesWithoutId.length == 0) return;
+
+		this.instance.instancesWithoutId.forEach(instance => {
+			if (!instance["id"]) throw new Error("Instance must have an id property on construction");
+			this.instance.instances[instance.__name][instance["id"]] = instance;
+			console.log(`Made ID assignment, ${instance.__name}#${instance["id"]}`);
+		});
+
+		this.instance.instancesWithoutId = [];
+	}
+
 	static handlePacket(message: string | RPCPacket | Buffer | ArrayBuffer | Buffer[], client?: unknown) {
+		this.checkInstancesWithoutIds();
 		if (message instanceof Buffer || message instanceof Uint8Array) {
-			const arr = message instanceof Buffer ? new Uint8Array(message) : message;
+			const arr = message instanceof Buffer ? message : Buffer.from(message);
 			try {
-				const packets = decompressRpcPackets([...arr]);
-				packets.forEach(packet => {
-					this.handlePacket(packet, client);
-				});
+				const packets = decompressRpcPackets(arr);
+				for (let i = 0; i < packets.length; i++) {
+					this.handlePacket(packets[i], client);
+				}
 			} catch (e) {
-				// console.error(e);
+				console.error(e);
 				// console.log([...arr]);
 			}
 
@@ -201,9 +233,11 @@ class RPCController {
 			packet.className = altName;
 		}
 
-		const rpc = this.instance.rpcs.find(rpc => {
-			return rpc.target == packet.className && rpc.name == packet.method;
-		});
+		// const rpc = this.instance.rpcs.find(rpc => {
+		// 	return rpc.target == packet.className && rpc.name == packet.method;
+		// });
+		const key = `${packet.className}.${packet.method}`;
+		const rpc = this.instance.rpcs[key];
 
 		if (!rpc) {
 			if (!this.suppressRPCFindError) console.log(`Cannot find RPC ${packet.className}.${packet.method} with ID ${packet.id}`);
@@ -219,7 +253,9 @@ class RPCController {
 
 		switch (rpc.type) {
 			case "instance": {
-				const instance = this.instance.instances[packet.className]?.find(i => i.id == packet.id);
+				const instanceList = this.instance.instances[packet.className];
+				if (!instanceList) return console.warn(`No existing instance for ${packet.className} (id: ${packet.id})`, packet);
+				const instance = instanceList[packet.id];
 				if (!instance) return console.warn(`No existing instance for ${packet.className} (id: ${packet.id})`, packet);
 				if (!instance[packet.method]) return console.warn(`No RPC method ${packet.className}.${packet.method}`, packet);
 				instance[packet.method].apply(instance, packet.args);
@@ -244,8 +280,9 @@ class RPCController {
 	}
 
 	static getRpcHandler(className: string, instanceId: string) {
-		const instance = this.instance.instances[className]?.find(i => i.id == instanceId);
-		return instance;
+		const instanceList = this.instance.instances[className];
+		if (!instanceList) return undefined;
+		return instanceList[instanceId];
 	}
 }
 

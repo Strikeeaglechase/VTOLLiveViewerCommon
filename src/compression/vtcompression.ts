@@ -10,8 +10,8 @@ import { compressRpcPackets } from "./compress.js";
 import { decompressRpcPacketsV4, decompressRpcPacketsV4Gen } from "./decompresseV4.js";
 import { decompressRpcPacketsV3, decompressRpcPacketsV3Gen } from "./decompressV3.js";
 
-type Decompressor = (bytes: number[] | Buffer) => RPCPacket[];
-type GenDecompressor = (bytes: number[] | Buffer) => Generator<RPCPacket, void, unknown>;
+type Decompressor = (bytes: Buffer) => RPCPacket[];
+type GenDecompressor = (bytes: Buffer) => Generator<RPCPacket, void, unknown>;
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -23,7 +23,7 @@ const decompressVersions: Decompressor[] = [() => {}, () => {}, () => {}, decomp
 // eslint-disable-next-line @typescript-eslint/no-empty-function
 const decompressGenVersions: GenDecompressor[] = [() => {}, () => {}, () => {}, decompressRpcPacketsV3Gen, decompressRpcPacketsV4Gen];
 
-function decompressRpcPackets(bytes: number[] | Buffer) {
+function decompressRpcPackets(bytes: Buffer) {
 	if (bytes.length == 0) return [];
 	const version = bytes[0];
 	if (version < 1 || version >= decompressVersions.length) {
@@ -51,7 +51,7 @@ function* genEmpty(): Generator<RPCPacket, void, unknown> {
 	yield;
 }
 
-function decompressRpcPacketsGen(bytes: number[] | Buffer) {
+function decompressRpcPacketsGen(bytes: Buffer) {
 	if (bytes.length == 0) return genEmpty();
 	const version = bytes[0];
 	if (version < 1 || version >= decompressVersions.length) {

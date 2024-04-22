@@ -106,11 +106,11 @@ function decompressArgs(values: Buffer, index: Index, length: number) {
 	return result;
 }
 
-export function decompressRpcPacketsV4(data: number[] | Buffer) {
-	if (data.length == 0) return [];
+export function decompressRpcPacketsV4(bytes: Buffer) {
+	if (bytes.length == 0) return [];
 	const index = new Index();
 
-	const bytes = data instanceof Buffer ? data : Buffer.from(data);
+	// const bytes = data instanceof Buffer ? data : Buffer.from(data);
 	function readOne() {
 		return bytes[index.plusplus];
 	}
@@ -203,12 +203,11 @@ export function decompressRpcPacketsV4(data: number[] | Buffer) {
 	return rpcPackets;
 }
 
-export function* decompressRpcPacketsV4Gen(data: number[] | Buffer) {
-	if (data.length == 0) return [];
+export function* decompressRpcPacketsV4Gen(bytes: Buffer) {
+	if (bytes.length == 0) return [];
 
 	const index = new Index();
 
-	const bytes = data instanceof Buffer ? data : Buffer.from(data);
 	function readOne() {
 		return bytes[index.plusplus];
 	}
