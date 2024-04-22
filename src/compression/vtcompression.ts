@@ -3,6 +3,8 @@
 export const debug_decompress = false;
 export const debug_compress = false;
 export const debug_packet_structure = false;
+export const rethrow_on_error = true;
+
 import { RPCPacket } from "../rpc.js";
 import { compressRpcPackets } from "./compress.js";
 import { decompressRpcPacketsV4, decompressRpcPacketsV4Gen } from "./decompresseV4.js";
@@ -40,6 +42,7 @@ function decompressRpcPackets(bytes: number[] | Buffer) {
 		console.error(e);
 		console.error(`Data:`);
 		// console.error("[" + bytes.join(",") + "]");
+		if (rethrow_on_error) throw e;
 		return [];
 	}
 }
@@ -67,6 +70,7 @@ function decompressRpcPacketsGen(bytes: number[] | Buffer) {
 		console.error(e);
 		console.error(`Data:`);
 		// console.error("[" + bytes.join(",") + "]");
+		if (rethrow_on_error) throw e;
 		return genEmpty();
 	}
 }

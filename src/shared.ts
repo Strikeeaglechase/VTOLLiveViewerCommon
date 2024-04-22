@@ -142,7 +142,7 @@ export enum LobbyReadyState {
 	NoMission
 }
 
-@EnableRPCs("instance")
+@EnableRPCs("instance", ["NuclearOptionLobby"])
 export class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_message" | "mission_info" | "connection_result" | "lobby_ready_state"> {
 	public name = "";
 	public missionName = "";

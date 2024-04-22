@@ -2,7 +2,16 @@ import { RPCPacket } from "../rpc.js";
 import { ArgumentType, bitCheck, Index, PacketFlags } from "./compress.js";
 import { debug_decompress } from "./vtcompression.js";
 
-function exactBytesToNum(buf: number[] | Buffer, index: Index) {
+try {
+	const x = Buffer.from("");
+} catch (e) {
+	console.warn("Buffer not defined, using global Buffer");
+	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+	// @ts-ignore
+	window.Buffer = buffer.Buffer;
+}
+
+function exactBytesToNum(buf: Buffer, index: Index) {
 	const ui8 = new Uint8Array(buf.slice(index.idx, index.idx + 8));
 	const f64 = new Float64Array(ui8.buffer);
 	index.increment(8);
@@ -23,15 +32,31 @@ function decompressInt(readOne: () => number) {
 	return result;
 }
 
-function bytesToNum(buf: number[] | Buffer, index: Index) {
-	const ui8 = new Uint8Array(buf.slice(index.idx, index.idx + 4));
-	const f32 = new Float32Array(ui8.buffer);
-	index.increment(4);
+// function _bytesToNum(buf: Buffer, index: Index) {
+// 	const ui8 = new Uint8Array(buf.slice(index.idx, index.idx + 4));
+// 	const f32 = new Float32Array(ui8.buffer);
+// 	index.increment(4);
+// 	return f32[0];
+// }
 
-	return f32[0];
+function bytesToNum(buf: Buffer, index: Index) {
+	index.increment(4);
+	return buf.readFloatLE(index.idx - 4);
 }
 
-function decompressArgs(values: number[] | Buffer, index: Index, length: number) {
+// function __bytesToNum(buf: Buffer, index: Index) {
+// 	// const idx = index.idx;
+// 	index.increment(4);
+
+// 	// if (buf[index.idx - 4] == 0 && buf[index.idx - 3] == 0 && buf[index.idx - 2] == 0 && buf[index.idx - 1] == 0) return 0;
+// 	const sign = (buf[index.idx - 1] >> 7) * 2 - 1;
+// 	const exponent = ((buf[index.idx - 1] & 0b01111111) << 1) | ((buf[index.idx - 2] & 0b10000000) >> 7);
+// 	const mantissa = (0b1 << 23) | ((buf[index.idx - 2] & 0b01111111) << 16) | (buf[index.idx - 3] << 8) | buf[index.idx - 4];
+// 	const result = -sign * 2 ** (exponent - 127) * (mantissa / 2 ** 23);
+// 	return result;
+// }
+
+function decompressArgs(values: Buffer, index: Index, length: number) {
 	// if (debug_decompress) console.log(` - Arg data: ${values.join(" ")}`);
 	const result: unknown[] = [];
 	// let i = 0;
@@ -41,7 +66,7 @@ function decompressArgs(values: number[] | Buffer, index: Index, length: number)
 		switch (type) {
 			case ArgumentType.String: {
 				const len = values[index.plusplus];
-				const str = String.fromCharCode(...values.slice(index.idx, index.idx + len));
+				const str = values.subarray(index.idx, index.idx + len).toString("ascii");
 				index.increment(len);
 				result.push(str);
 				// if (debug_decompress) console.log(`  - Arg(${i - len}): String(${len})  ${str}`);
@@ -81,10 +106,11 @@ function decompressArgs(values: number[] | Buffer, index: Index, length: number)
 	return result;
 }
 
-export function decompressRpcPacketsV4(bytes: number[] | Buffer) {
-	if (bytes.length == 0) return [];
+export function decompressRpcPacketsV4(data: number[] | Buffer) {
+	if (data.length == 0) return [];
 	const index = new Index();
 
+	const bytes = data instanceof Buffer ? data : Buffer.from(data);
 	function readOne() {
 		return bytes[index.plusplus];
 	}
@@ -152,7 +178,7 @@ export function decompressRpcPacketsV4(bytes: number[] | Buffer) {
 
 		const argLen = decompressInt(readOne);
 		if (debug_decompress) console.log(` - Arg len: ${argLen}`);
-		let args: unknown[] = [];
+		let args: unknown[];
 		if (bitCheck(packetFlags, PacketFlags.BinBody)) {
 			args = decompressArgs(bytes, index, argLen); // read(argLen)
 		} else {
@@ -177,10 +203,12 @@ export function decompressRpcPacketsV4(bytes: number[] | Buffer) {
 	return rpcPackets;
 }
 
-export function* decompressRpcPacketsV4Gen(bytes: number[] | Buffer) {
-	if (bytes.length == 0) return [];
+export function* decompressRpcPacketsV4Gen(data: number[] | Buffer) {
+	if (data.length == 0) return [];
+
 	const index = new Index();
 
+	const bytes = data instanceof Buffer ? data : Buffer.from(data);
 	function readOne() {
 		return bytes[index.plusplus];
 	}
