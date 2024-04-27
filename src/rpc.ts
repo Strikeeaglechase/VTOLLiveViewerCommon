@@ -133,8 +133,8 @@ class RPCController {
 		for (const instanceList of Object.values(this.instance.instances)) {
 			for (const i in instanceList) {
 				if (instanceList[i] == instance) {
-					delete instanceList[i];
 					console.log(`Deregistered ${instanceList[i].__name}#${i}`);
+					delete instanceList[i];
 				}
 			}
 		}
@@ -196,7 +196,7 @@ class RPCController {
 		this.instance.instancesWithoutId.forEach(instance => {
 			if (!instance["id"]) throw new Error("Instance must have an id property on construction");
 			this.instance.instances[instance.__name][instance["id"]] = instance;
-			console.log(`Made ID assignment, ${instance.__name}#${instance["id"]}`);
+			// console.log(`Made ID assignment, ${instance.__name}#${instance["id"]}`);
 		});
 
 		this.instance.instancesWithoutId = [];
@@ -223,8 +223,9 @@ class RPCController {
 		try {
 			if (typeof message == "string") packet = JSON.parse(message);
 		} catch (e) {
-			console.log(`Error parsing RPC packet: ${e}`);
-			console.log(message);
+			console.error(`Error parsing RPC packet: ${e}`);
+			console.error(message);
+			console.error(e);
 		}
 
 		// Check alt name
