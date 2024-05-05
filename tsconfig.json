@@ -14,7 +14,8 @@
 		],
 		"composite": true,
 		"removeComments": false,
-		"outDir": "dist"
+		"outDir": "dist",
+		"rootDir": "src"
 	},
 	"include": [
 		"src/**/*.ts",
