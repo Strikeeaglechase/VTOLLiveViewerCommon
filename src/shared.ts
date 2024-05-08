@@ -154,6 +154,7 @@ export class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log
 	public isPrivate = false;
 	public players: Player[] = [];
 	public isOpen = true;
+	public activelyRecording = false;
 	public mission: MissionInfoWithoutSpawns | null = null;
 
 	constructor(public id: string) {
@@ -224,6 +225,11 @@ export class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log
 	public UpdateLobbyStatus(state: LobbyReadyState) {
 		this.readyStatus = state;
 		this.emit("lobby_ready_state", state);
+	}
+
+	@RPC("in")
+	isRecording(isRecording: boolean) {
+		this.activelyRecording = isRecording;
 	}
 
 	public async waitForConnectionResult(): Promise<LobbyConnectionResult> {
