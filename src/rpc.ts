@@ -21,7 +21,7 @@ interface RPCHandler {
 interface RPCPacket {
 	className: string;
 	method: string;
-	args: any;
+	args: any[];
 	id?: string;
 	timestamp?: number;
 	pid?: number;
