@@ -241,7 +241,7 @@ class RPCController {
 		const rpc = this.instance.rpcs[key];
 
 		if (!rpc) {
-			if (!this.suppressRPCFindError) console.log(`Cannot find RPC ${packet.className}.${packet.method} with ID ${packet.id}`);
+			if (!this.suppressRPCFindError) console.debug(`Cannot find RPC ${packet.className}.${packet.method} with ID ${packet.id}`);
 			return;
 		}
 
