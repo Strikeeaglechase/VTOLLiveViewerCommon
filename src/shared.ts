@@ -1,7 +1,6 @@
 /* eslint-disable no-cond-assign */
 /* eslint-disable no-undef */
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { EventEmitter } from "./eventEmitter.js";
 import { EnableRPCs, RPC, RPCPacket } from "./rpc.js";
 
@@ -96,6 +95,8 @@ export interface RecordedLobbyInfo {
 	lobbyName: string;
 	missionName: string;
 	missionId: string;
+	hostName: string;
+	hostId: string;
 	missionInfo: MissionInfo;
 	campaignId: string;
 	workshopId: string;
@@ -156,6 +157,8 @@ export class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log
 	public isOpen = true;
 	public activelyRecording = false;
 	public mission: MissionInfoWithoutSpawns | null = null;
+	public hostName: string;
+	public hostId: string;
 
 	constructor(public id: string) {
 		super();
@@ -170,7 +173,9 @@ export class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log
 		maxPlayers: number,
 		isPrivate: boolean,
 		isConnected: boolean,
-		players: RawPlayerInfo[]
+		players: RawPlayerInfo[],
+		hostId: string,
+		hostName: string
 	) {
 		this.name = name;
 		this.missionName = missionName;
@@ -179,6 +184,9 @@ export class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log
 		this.isConnected = isConnected;
 		this.isPrivate = isPrivate;
 		this.players = players.map(p => new Player(p));
+		this.hostId = hostId;
+		this.hostName = hostName;
+
 		if (isConnected) console.log(`Update lobby info got ${this.players.length} players`);
 		if (isConnected) this.state = LobbyConnectionStatus.Connected;
 	}
