@@ -263,7 +263,8 @@ export class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log
 export enum UserScopes {
 	ALPHA_ACCESS = "alpha_access",
 	USER = "user",
-	ADMIN = "admin"
+	ADMIN = "admin",
+	DONOR = "donor"
 }
 
 export enum AuthType {
