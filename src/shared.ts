@@ -130,12 +130,16 @@ export interface VTGRHeader {
 	chunks: VTGRDataChunk[];
 }
 
+export const CURRENT_VTGR_METADATA_VERSION = "1";
 export interface VTGRMetadata {
 	id: string;
 	players: { name: string; id: string }[];
 
 	netInstantiates: number;
 	totalPackets: number;
+
+	version: string;
+	errored: boolean;
 }
 
 export enum LobbyReadyState {
