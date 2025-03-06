@@ -84,7 +84,7 @@ export interface MissionInfoWithoutSpawns {
 }
 
 export interface MissionInfo extends MissionInfoWithoutSpawns {
-	spawns: { name: string; id: number }[];
+	spawns: { name: string; id: number; vehicle: string; unitGroup: string }[];
 	allUnitSpawns: { name: string; id: number }[];
 	waypoints: { name: string; id: number; position: Vector3 }[];
 	bullseye: Record<Team, number>;
