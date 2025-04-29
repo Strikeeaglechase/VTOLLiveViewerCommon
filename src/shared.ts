@@ -74,6 +74,9 @@ export interface MultiRPCPacket {
 
 export type Packet = RPCPacket | AssignID | MultiRPCPacket;
 
+// prettier-ignore
+export enum PhoneticLetters { Alpha, Bravo, Charlie, Delta, Echo, Foxtrot, Golf, Hotel, India, Juliet, Kilo, Lima, Mike, November, Oscar, Papa, Quebec, Romeo, Sierra, Tango, Uniform, Victor, Whiskey, Xray, Yankee, Zulu }
+
 export interface MissionInfoWithoutSpawns {
 	name: string;
 	id: string;
@@ -84,10 +87,12 @@ export interface MissionInfoWithoutSpawns {
 }
 
 export interface MissionInfo extends MissionInfoWithoutSpawns {
-	spawns: { name: string; id: number; vehicle: string; unitGroup: string }[];
+	spawns: { name: string; id: number; vehicle: string; unitGroup: string; slotCount: number }[];
 	allUnitSpawns: { name: string; id: number }[];
 	waypoints: { name: string; id: number; position: Vector3 }[];
 	bullseye: Record<Team, number>;
+	alliedUnitGroupIds: Partial<Record<PhoneticLetters, number[]>>;
+	enemyUnitGroupIds: Partial<Record<PhoneticLetters, number[]>>;
 }
 
 export interface RecordedLobbyInfo {
@@ -293,6 +298,8 @@ export interface DbUserEntry {
 	lastLoginTime: number;
 	createdAt: number;
 	lastUserObject: HCUser;
+
+	authHistory: { type: AuthType; time: number; ip: string }[];
 }
 
 export interface RecordedLobbyPacket {
