@@ -132,6 +132,8 @@ export interface VTGRDataChunk {
 export interface VTGRHeader {
 	info: RecordedLobbyInfo;
 	id: string;
+	includesMission: boolean;
+	isConvertedVtr: boolean;
 	chunks: VTGRDataChunk[];
 }
 

@@ -49,7 +49,7 @@ class RPCController {
 	private constructor() {}
 
 	private newInRpcs: RPCHandler[] = [];
-	private _rpcs: RPCHandler[] = [];
+	// private _rpcs: RPCHandler[] = [];
 	private rpcs: Record<string, RPCHandler> = {};
 
 	private sendHandler: ((packet: RPCPacket) => void) | ((packet: Uint8Array) => void);
@@ -108,7 +108,7 @@ class RPCController {
 		this.newInRpcs.forEach(rpc => {
 			rpc.type = mode;
 		});
-		console.log(`Registered ${mode} RPCs on ${defaultName}${this.newInRpcs.map(r => `\n\t- ${r.name}`)}`);
+		// console.log(`Registered ${mode} RPCs on ${defaultName}${this.newInRpcs.map(r => `\n\t- ${r.name}`)}`);
 		// this.rpcs.push(...this.newInRpcs);
 		this.newInRpcs.forEach(rpc => {
 			const key = `${rpc.target}.${rpc.name}`;
@@ -194,7 +194,7 @@ class RPCController {
 		if (this.instance.instancesWithoutId.length == 0) return;
 
 		this.instance.instancesWithoutId.forEach(instance => {
-			if (!instance["id"]) throw new Error("Instance must have an id property on construction");
+			if (instance["id"] == undefined) throw new Error("Instance must have an id property on construction");
 			this.instance.instances[instance.__name][instance["id"]] = instance;
 			// console.log(`Made ID assignment, ${instance.__name}#${instance["id"]}`);
 		});

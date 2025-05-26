@@ -180,8 +180,12 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 		});
 	};
 
-	if (rpcPackets[0].timestamp && includeTimestamps) {
-		if (!rpcPackets.every(p => p.timestamp)) {
+	if (includeTimestamps && rpcPackets[0].timestamp == undefined) {
+		console.warn(`compressRpcPackets called with includeTimestamps = true, but first packet has no timestamp`);
+	}
+
+	if (rpcPackets[0].timestamp != undefined && includeTimestamps) {
+		if (!rpcPackets.every(p => p.timestamp != undefined)) {
 			console.log(JSON.stringify(rpcPackets));
 			throw new Error("All packets must have a timestamp if any do");
 		} else {
@@ -224,6 +228,7 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 			}
 		});
 	}
+
 	push("timestamp-offset", ...exactNumToBytes(timestampOffset));
 
 	// Add rpc packets
@@ -236,7 +241,7 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 			(packet.id ? PacketFlags.HasId : PacketFlags.NoId) |
 			(argCompress ? PacketFlags.BinBody : PacketFlags.JSONBody) |
 			(idIsNum ? PacketFlags.IdIsNumber : PacketFlags.IdIsString) |
-			(packet.timestamp && includeTimestamps ? PacketFlags.HasTimestamp : 0);
+			(packet.timestamp != undefined && includeTimestamps ? PacketFlags.HasTimestamp : 0);
 
 		push("class-name", ...strIdx(packet.className.toString()));
 		push("method", ...strIdx(packet.method.toString()));
@@ -245,7 +250,7 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 
 		// Should this be done in multiple lines, yes, am I going to? No!
 		if (packet.id) push("id", ...(idIsNum ? compressInt(parseInt(packet.id)) : strIdx(packet.id)));
-		if (packet.timestamp && includeTimestamps) {
+		if (packet.timestamp != undefined && includeTimestamps) {
 			push("packet-timestamp", ...compressInt(packet.timestamp - timestampOffset));
 		}
 
