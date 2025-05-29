@@ -70,6 +70,12 @@ function allArgsCanCompress(args: unknown[]) {
 function numToBytes(num: number) {
 	const f32 = new Float32Array(1);
 	f32[0] = num;
+
+	if (Math.abs(f32[0] - num) > 0.1) {
+		console.log(`numToBytes called with ${num}, which resulted in a large precision loss: ${f32[0]} (delta: ${f32[0] - num})`);
+		throw new Error(`numToBytes called with ${num}, which resulted in a large precision loss: ${f32[0]} (delta: ${f32[0] - num})`);
+	}
+
 	return new Uint8Array(f32.buffer);
 }
 
@@ -155,7 +161,7 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 		result.push(...nums);
 
 		// Debug
-		if (debug_compress) console.log(`${reason}  ${nums.join(" ")}`);
+		if (debug_compress) console.log(`[${result.length - nums.length}] ${reason}  ${nums.join(" ")}`);
 		if (debug_packet_structure) {
 			let reasonName = reason;
 			if (reasonName in packetStructureDebugAliases) reasonName = packetStructureDebugAliases[reasonName];
