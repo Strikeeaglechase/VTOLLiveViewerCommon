@@ -8,18 +8,12 @@
 		"moduleResolution": "node",
 		"module": "esnext",
 		"allowSyntheticDefaultImports": true,
-		"lib": [
-			"ES2019",
-			"DOM"
-		],
+		"lib": ["ES2019", "DOM"],
 		"composite": true,
 		"removeComments": false,
 		"outDir": "dist",
 		"rootDir": "src"
 	},
-	"include": [
-		"src/**/*.ts",
-		"src/*.ts", "src/compression/decompressV2.depc",
-	],
+	"include": ["src/**/*.ts", "src/*.ts"],
 	"references": []
 }

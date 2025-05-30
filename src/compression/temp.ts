@@ -1,3 +1,5 @@
+import fs from "fs";
+
 function numToBytes(num: number) {
 	const f32 = new Float32Array(1);
 	f32[0] = num;
