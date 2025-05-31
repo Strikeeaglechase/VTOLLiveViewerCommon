@@ -1,14 +1,18 @@
 import { RPCPacket } from "../rpc.js";
-import { ArgumentType, bitCheck, Index, PacketFlags } from "./compress.js";
+import { bitCheck, Index } from "./compress.js";
 import { debug_decompress } from "./vtcompression.js";
 
 try {
 	const x = Buffer.from("");
 } catch (e) {
 	console.warn("Buffer not defined, using global Buffer");
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
-	window.Buffer = buffer.Buffer;
+	if (!window) {
+		console.error("Buffer is not defined and window is not available. Cannot proceed with decompression.");
+	} else {
+		// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+		// @ts-ignore
+		window.Buffer = buffer.Buffer;
+	}
 }
 
 function exactBytesToNum(buf: Buffer, index: Index) {
@@ -55,6 +59,24 @@ function bytesToNum(buf: Buffer, index: Index) {
 // 	const result = -sign * 2 ** (exponent - 127) * (mantissa / 2 ** 23);
 // 	return result;
 // }
+
+enum PacketFlags {
+	NoId = 0b00000001,
+	HasId = 0b00000010,
+	JSONBody = 0b00000100,
+	BinBody = 0b00001000,
+	IdIsNumber = 0b00010000,
+	IdIsString = 0b00100000,
+	HasTimestamp = 0b01000000
+}
+
+enum ArgumentType {
+	String = 0b00000001,
+	Number = 0b00000010,
+	Boolean = 0b00000100,
+	Null = 0b00001000,
+	Vector = 0b00010000
+}
 
 function decompressArgs(values: Buffer, index: Index, length: number) {
 	// if (debug_decompress) console.log(` - Arg data: ${values.join(" ")}`);
@@ -203,8 +225,8 @@ export function decompressRpcPacketsV4(bytes: Buffer) {
 	return rpcPackets;
 }
 
-export function* decompressRpcPacketsV4Gen(bytes: Buffer) {
-	if (bytes.length == 0) return [];
+export function* decompressRpcPacketsV4Gen(bytes: Buffer): Generator<RPCPacket, void, unknown> {
+	if (bytes.length == 0) return;
 
 	const index = new Index();
 

@@ -1,0 +1,299 @@
+import { RPCPacket } from "../rpc.js";
+import { bitCheck, Index } from "./compress.js";
+import { debug_decompress } from "./vtcompression.js";
+
+try {
+	const x = Buffer.from("");
+} catch (e) {
+	console.warn("Buffer not defined, using global Buffer");
+	if (!window) {
+		console.error("Buffer is not defined and window is not available. Cannot proceed with decompression.");
+	} else {
+		// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+		// @ts-ignore
+		window.Buffer = buffer.Buffer;
+	}
+}
+
+enum PacketFlags {
+	HasId = 0b00000001,
+	JSONBody = 0b00000010,
+	IdIsNumber = 0b00000100,
+	HasTimestamp = 0b00001000,
+	ShortStringIndexMode = 0b00010000
+}
+
+enum ArgumentType {
+	ShortString, // Any ascii string, up to length 255
+	String, // Any ascii string, unlimited length
+	Zero, // Literal number 0
+	One, // Literal number 1
+	Byte, // 8 bit positive int
+	NegativeByte, // 8 bit negative int
+	Short, // 16 bit positive int
+	NegativeShort, // 16 bit negative int
+	Int, // 32 bit positive int
+	NegativeInt, // 32 bit negative int
+	Float, // 32 bit float
+	Double, // 64 bit float
+	True, // Literal true
+	False, // Literal false
+	Null, // Literal null
+	Vector, // Vector3, 3 floats
+	ZeroVector // Vector3 with all components 0
+}
+
+class Reader {
+	private index = 0;
+	public get idx() {
+		return this.index;
+	}
+
+	constructor(private buf: Buffer) {}
+
+	public read(length: number) {
+		const result = this.buf.subarray(this.index, this.index + length);
+		this.index += length;
+		return result;
+	}
+
+	public readF64() {
+		const result = this.buf.readDoubleLE(this.index);
+		this.index += 8;
+		return result;
+	}
+
+	public readF32() {
+		const result = this.buf.readFloatLE(this.index);
+		this.index += 4;
+		return result;
+	}
+
+	public readI32() {
+		const result = this.buf.readUInt32LE(this.index);
+		this.index += 4;
+		return result;
+	}
+
+	public readI16() {
+		const result = this.buf.readUInt16LE(this.index);
+		this.index += 2;
+		return result;
+	}
+
+	public readByte() {
+		const result = this.buf.readUInt8(this.index);
+		this.index += 1;
+		return result;
+	}
+
+	public decompressInt() {
+		let result = 0;
+		let index = 0;
+		while (index < 50) {
+			const next = this.readByte();
+			const bits = next & 0b01111111;
+			result = result + (bits << (7 * index));
+			if ((next & 0b10000000) == 0) break;
+			index++;
+		}
+		return result;
+	}
+}
+
+function decompressArgs(reader: Reader, length: number) {
+	const result: unknown[] = [];
+	const endPoint = reader.idx + length;
+	while (reader.idx < endPoint) {
+		const type = reader.readByte();
+		// console.log(`Arg type: ${type}, idx: ${reader.idx}`);
+		switch (type) {
+			case ArgumentType.ShortString: {
+				const strLen = reader.readByte();
+				const str = reader.read(strLen).toString("ascii");
+				result.push(str);
+				break;
+			}
+			case ArgumentType.String: {
+				const strLen = reader.decompressInt();
+				const str = reader.read(strLen).toString("ascii");
+				result.push(str);
+				break;
+			}
+			case ArgumentType.Zero:
+				result.push(0);
+				break;
+			case ArgumentType.One:
+				result.push(1);
+				break;
+			case ArgumentType.True:
+				result.push(true);
+				break;
+			case ArgumentType.False:
+				result.push(false);
+				break;
+			case ArgumentType.Byte:
+				result.push(reader.readByte());
+				break;
+			case ArgumentType.NegativeByte:
+				result.push(-reader.readByte());
+				break;
+			case ArgumentType.Short:
+				result.push(reader.readI16());
+				break;
+			case ArgumentType.NegativeShort:
+				result.push(-reader.readI16());
+				break;
+			case ArgumentType.Int:
+				result.push(reader.readI32());
+				break;
+			case ArgumentType.NegativeInt:
+				result.push(-reader.readI32());
+				break;
+			case ArgumentType.Float:
+				result.push(reader.readF32());
+				break;
+			case ArgumentType.Double:
+				result.push(reader.readF64());
+				break;
+			case ArgumentType.Null:
+				result.push(null);
+				break;
+			case ArgumentType.Vector: {
+				const x = reader.readF32();
+				const y = reader.readF32();
+				const z = reader.readF32();
+				result.push({ x: x, y: y, z: z });
+				break;
+			}
+			case ArgumentType.ZeroVector:
+				result.push({ x: 0, y: 0, z: 0 });
+				break;
+			default:
+				throw new Error(`Unknown argument type ${type}`);
+		}
+	}
+	return result;
+}
+
+export function decompressRpcPacketsV5(bytes: Buffer) {
+	const packets: RPCPacket[] = [];
+	for (const packet of decompressRpcPacketsV5Gen(bytes)) {
+		packets.push(packet);
+	}
+
+	return packets;
+}
+
+export function* decompressRpcPacketsV5Gen(bytes: Buffer): Generator<RPCPacket, void, unknown> {
+	if (bytes.length == 0) return;
+
+	const reader = new Reader(bytes);
+
+	const version = reader.readByte();
+	if (debug_decompress) console.log(`Version: ${version}`);
+
+	const numStrs = reader.decompressInt();
+	if (debug_decompress) console.log(`Str count: ${numStrs}`);
+	const strings: string[] = [];
+	const getStrFromIdx = () => strings[reader.decompressInt()];
+	for (let i = 0; i < numStrs; i++) {
+		const strLen = reader.readByte();
+		let str = "";
+		for (let j = 0; j < strLen; j++) {
+			str += String.fromCharCode(reader.readByte());
+		}
+
+		strings.push(str);
+		if (debug_decompress) console.log(` #${i} - ${str}`);
+	}
+
+	// Get timestamp offset
+	const timestampOffset = reader.readF64();
+
+	if (debug_decompress) console.log(`Timestamp offset: ${timestampOffset}`);
+
+	// RPC Packet format: {classNameIdx} {methodNameIdx} {hasId} {idIdx} {arglen} [arg str]
+	// Read rpc packets
+	const numRpcPackets = reader.readI32();
+	if (debug_decompress) console.log(`RPC Count: ${numRpcPackets}`);
+	for (let i = 0; i < numRpcPackets; i++) {
+		const packetFlags = reader.readByte();
+		const idIsNum = bitCheck(packetFlags, PacketFlags.IdIsNumber);
+		const hasId = bitCheck(packetFlags, PacketFlags.HasId);
+		const hasTimestamp = bitCheck(packetFlags, PacketFlags.HasTimestamp);
+		const shortIndexMode = bitCheck(packetFlags, PacketFlags.ShortStringIndexMode);
+		const isJsonBody = bitCheck(packetFlags, PacketFlags.JSONBody);
+
+		let className: string;
+		let methodName: string;
+
+		if (shortIndexMode) {
+			const indexByte = reader.readByte();
+			const classNameIdx = (indexByte & 0b11110000) >> 4;
+			const methodNameIdx = indexByte & 0b00001111;
+
+			className = strings[classNameIdx];
+			methodName = strings[methodNameIdx];
+
+			if (className == undefined) {
+				throw new Error(`Class name index ${classNameIdx} out of bounds in strings array`);
+			}
+			if (methodName == undefined) {
+				throw new Error(`Method name index ${methodNameIdx} out of bounds in strings array`);
+			}
+		} else {
+			className = getStrFromIdx();
+			methodName = getStrFromIdx();
+		}
+
+		if (debug_decompress) {
+			console.log(`RPC #${i} at ${reader.idx}`);
+			console.log(` - Class: ${className}`);
+			console.log(` - Method: ${methodName}`);
+			console.log(` - idIsNum: ${idIsNum}`);
+			console.log(` - hasId: ${hasId}`);
+			console.log(` - hasTimestamp: ${hasTimestamp}`);
+			console.log(` - shortIndexMode: ${shortIndexMode}`);
+			console.log(` - isJsonBody: ${isJsonBody}`);
+		}
+
+		let id: string | undefined = undefined;
+		if (hasId) {
+			if (idIsNum) {
+				id = reader.decompressInt().toString();
+			} else {
+				id = getStrFromIdx();
+			}
+		}
+		if (debug_decompress) console.log(` - ID: ${id}`);
+
+		let timestamp: number | undefined = undefined;
+		if (hasTimestamp) timestamp = reader.decompressInt() + timestampOffset;
+		if (debug_decompress) console.log(` - Timestamp: ${timestamp}`);
+
+		const argLen = reader.decompressInt();
+		if (debug_decompress) console.log(` - Arg len: ${argLen}`);
+		let args: unknown[];
+		if (!isJsonBody) {
+			args = decompressArgs(reader, argLen);
+		} else {
+			let argStr = "";
+			for (let j = 0; j < argLen; j++) {
+				argStr += String.fromCharCode(reader.readByte());
+			}
+			// const argStr = Buffer.from(read(argLen)).toString("ascii");
+			args = JSON.parse(argStr);
+		}
+
+		const packet: RPCPacket = {
+			className: className,
+			method: methodName,
+			id: id,
+			timestamp: timestamp,
+			args: args
+		};
+
+		yield packet;
+	}
+}

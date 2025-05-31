@@ -1,5 +1,13 @@
 import fs from "fs";
+import { decompressRpcPackets } from "./vtcompression.js";
 
+const data = fs.readFileSync("../../test_data.json", "utf-8");
+const buffer = Buffer.from(JSON.parse(data) as number[]);
+
+const decompressed = decompressRpcPackets(buffer);
+console.log(`Decompressed ${decompressed.length} packets`);
+
+/*
 function numToBytes(num: number) {
 	const f32 = new Float32Array(1);
 	f32[0] = num;
@@ -13,7 +21,7 @@ const x = numToBytes(n);
 const result = bytesToNum(x);
 const result2 = oldBytesToNum(x);
 const result3 = newBytesToNum(x);
-console.log({ result, result2, result3 });
+// console.log({ result, result2, result3 });
 
 function oldBytesToNum(buf) {
 	const ui8 = new Uint8Array(buf);
@@ -39,3 +47,5 @@ function bytesToNum(buf) {
 	const result = -sign * 2 ** (exponent - 127) * (mantissa / 2 ** 23);
 	return result;
 }
+
+*/

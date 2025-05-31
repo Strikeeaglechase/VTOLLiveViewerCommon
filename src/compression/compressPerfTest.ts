@@ -4,7 +4,8 @@ import { compressRpcPackets } from "./compress.js";
 import { decompressRpcPackets } from "./vtcompression.js";
 import _ from "lodash";
 
-const chunkedRpcs: RPCPacket[][] = JSON.parse(fs.readFileSync("../../test_rpcs.json", "utf-8"));
+const fileContent = fs.readFileSync("../../test_rpcs.json", "utf-8");
+const chunkedRpcs: RPCPacket[][] = JSON.parse(fileContent);
 let totalRpcs = 0;
 chunkedRpcs.forEach(chunk => (totalRpcs += chunk.length));
 console.log(`Total RPCs: ${totalRpcs}`);
@@ -13,13 +14,16 @@ const compressStart = performance.now();
 const compressedChunks = chunkedRpcs.map(rpcs => compressRpcPackets(rpcs, true));
 const compressDur = performance.now() - compressStart;
 const compressPacketsPerSecond = Math.round(totalRpcs / (compressDur / 1000));
+const compressedBytes = compressedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
 console.log(`Compression took ${compressDur}ms (${compressPacketsPerSecond.toFixed(0)} pps)`);
+console.log(`Compressed size: ${(compressedBytes / 1024).toFixed(0)}kb, JSON size: ${(fileContent.length / 1024).toFixed(0)}kb`);
+console.log(`Compression ratio: ${(compressedBytes / fileContent.length).toFixed(3)}`);
 
 const decompressStart = performance.now();
 const decompressedChunks = compressedChunks.map(compressed => decompressRpcPackets(Buffer.from(compressed)));
 const decompressDur = performance.now() - decompressStart;
 const decompressPacketsPerSecond = Math.round(totalRpcs / (decompressDur / 1000));
-console.log(`Decompression took ${decompressDur}ms (${decompressPacketsPerSecond.toFixed(2)} pps)`);
+console.log(`Decompression took ${decompressDur}ms (${decompressPacketsPerSecond.toFixed(0)} pps)`);
 
 function assert(condition: boolean, message: string) {
 	if (!condition) {

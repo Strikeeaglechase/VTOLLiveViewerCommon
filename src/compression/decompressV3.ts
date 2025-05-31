@@ -1,6 +1,24 @@
 import { RPCPacket } from "../rpc.js";
-import { ArgumentType, bitCheck, Index, PacketFlags } from "./compress.js";
+import { bitCheck, Index } from "./compress.js";
 import { debug_decompress } from "./vtcompression.js";
+
+enum PacketFlags {
+	NoId = 0b00000001,
+	HasId = 0b00000010,
+	JSONBody = 0b00000100,
+	BinBody = 0b00001000,
+	IdIsNumber = 0b00010000,
+	IdIsString = 0b00100000,
+	HasTimestamp = 0b01000000
+}
+
+enum ArgumentType {
+	String = 0b00000001,
+	Number = 0b00000010,
+	Boolean = 0b00000100,
+	Null = 0b00001000,
+	Vector = 0b00010000
+}
 
 function exactBytesToNum(buf: number[] | Buffer, index: Index) {
 	const ui8 = new Uint8Array(buf.slice(index.idx, index.idx + 8));
@@ -173,8 +191,8 @@ export function decompressRpcPacketsV3(bytes: number[] | Buffer) {
 	return rpcPackets;
 }
 
-export function* decompressRpcPacketsV3Gen(bytes: number[] | Buffer) {
-	if (bytes.length == 0) return [];
+export function* decompressRpcPacketsV3Gen(bytes: number[] | Buffer): Generator<RPCPacket, void, unknown> {
+	if (bytes.length == 0) return;
 	const index = new Index();
 
 	function readOne() {
