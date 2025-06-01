@@ -26,8 +26,6 @@ enum PacketFlags {
 enum ArgumentType {
 	ShortString, // Any ascii string, up to length 255
 	String, // Any ascii string, unlimited length
-	Zero, // Literal number 0
-	One, // Literal number 1
 	Byte, // 8 bit positive int
 	NegativeByte, // 8 bit negative int
 	Short, // 16 bit positive int
@@ -40,11 +38,19 @@ enum ArgumentType {
 	False, // Literal false
 	Null, // Literal null
 	Vector, // Vector3, 3 floats
-	ZeroVector // Vector3 with all components 0
+	ZeroVector, // Vector3 with all components 0
+	HalfVector // Vector3, 3 half floats
 }
+const lastArgType = ArgumentType.HalfVector as number;
 
 class Reader {
 	private index = 0;
+	private f16Buffer = Buffer.alloc(2);
+	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+	// @ts-ignore
+	private f16View = new Float16Array(this.f16Buffer.buffer);
+	private f16ByteView = new Uint8Array(this.f16Buffer.buffer);
+
 	public get idx() {
 		return this.index;
 	}
@@ -67,6 +73,17 @@ class Reader {
 		const result = this.buf.readFloatLE(this.index);
 		this.index += 4;
 		return result;
+	}
+
+	public readF16() {
+		const lowerByte = this.buf.readUInt8(this.index);
+		const upperByte = this.buf.readUInt8(this.index + 1);
+		this.index += 2;
+
+		this.f16ByteView[0] = lowerByte;
+		this.f16ByteView[1] = upperByte;
+
+		return this.f16View[0];
 	}
 
 	public readI32() {
@@ -101,79 +118,105 @@ class Reader {
 	}
 }
 
-function decompressArgs(reader: Reader, length: number) {
-	const result: unknown[] = [];
-	const endPoint = reader.idx + length;
-	while (reader.idx < endPoint) {
-		const type = reader.readByte();
-		// console.log(`Arg type: ${type}, idx: ${reader.idx}`);
-		switch (type) {
-			case ArgumentType.ShortString: {
-				const strLen = reader.readByte();
-				const str = reader.read(strLen).toString("ascii");
-				result.push(str);
-				break;
-			}
-			case ArgumentType.String: {
-				const strLen = reader.decompressInt();
-				const str = reader.read(strLen).toString("ascii");
-				result.push(str);
-				break;
-			}
-			case ArgumentType.Zero:
-				result.push(0);
-				break;
-			case ArgumentType.One:
-				result.push(1);
-				break;
-			case ArgumentType.True:
-				result.push(true);
-				break;
-			case ArgumentType.False:
-				result.push(false);
-				break;
-			case ArgumentType.Byte:
-				result.push(reader.readByte());
-				break;
-			case ArgumentType.NegativeByte:
-				result.push(-reader.readByte());
-				break;
-			case ArgumentType.Short:
-				result.push(reader.readI16());
-				break;
-			case ArgumentType.NegativeShort:
-				result.push(-reader.readI16());
-				break;
-			case ArgumentType.Int:
-				result.push(reader.readI32());
-				break;
-			case ArgumentType.NegativeInt:
-				result.push(-reader.readI32());
-				break;
-			case ArgumentType.Float:
-				result.push(reader.readF32());
-				break;
-			case ArgumentType.Double:
-				result.push(reader.readF64());
-				break;
-			case ArgumentType.Null:
-				result.push(null);
-				break;
-			case ArgumentType.Vector: {
-				const x = reader.readF32();
-				const y = reader.readF32();
-				const z = reader.readF32();
-				result.push({ x: x, y: y, z: z });
-				break;
-			}
-			case ArgumentType.ZeroVector:
-				result.push({ x: 0, y: 0, z: 0 });
-				break;
-			default:
-				throw new Error(`Unknown argument type ${type}`);
-		}
+const argStats: Record<string, { count: number; size: number }> = {} as any;
+export function printStats() {
+	console.log("Argument type stats:");
+	let totalBytes = 0;
+	for (const stats of Object.values(argStats)) {
+		totalBytes += stats.size;
 	}
-	return result;
+
+	const results = Object.entries(argStats)
+		.map(([type, stats]) => ({ type, stats }))
+		.sort((a, b) => b.stats.size - a.stats.size);
+
+	results.forEach(({ type, stats }) => {
+		const prec = (stats.size / totalBytes) * 100;
+		console.log(` - ${type}: ${stats.count}, ${stats.size} bytes, ${prec.toFixed(2)}%`);
+	});
+
+	// console.log(`Zero vector counts: ${propZeroCounts}`);
+}
+
+function decompressArgument(reader: Reader, result: unknown[], dynamicArgMap: Record<number, unknown> = {}) {
+	const start = reader.idx;
+	const type = reader.readByte();
+	switch (type) {
+		case ArgumentType.ShortString: {
+			const strLen = reader.readByte();
+			const str = reader.read(strLen).toString("ascii");
+			result.push(str);
+			break;
+		}
+		case ArgumentType.String: {
+			const strLen = reader.decompressInt();
+			const str = reader.read(strLen).toString("ascii");
+			result.push(str);
+			break;
+		}
+		case ArgumentType.True:
+			result.push(true);
+			break;
+		case ArgumentType.False:
+			result.push(false);
+			break;
+		case ArgumentType.Byte:
+			result.push(reader.readByte());
+			break;
+		case ArgumentType.NegativeByte:
+			result.push(-reader.readByte());
+			break;
+		case ArgumentType.Short:
+			result.push(reader.readI16());
+			break;
+		case ArgumentType.NegativeShort:
+			result.push(-reader.readI16());
+			break;
+		case ArgumentType.Int:
+			result.push(reader.readI32());
+			break;
+		case ArgumentType.NegativeInt:
+			result.push(-reader.readI32());
+			break;
+		case ArgumentType.Float:
+			result.push(reader.readF32());
+			break;
+		case ArgumentType.Double:
+			result.push(reader.readF64());
+			break;
+		case ArgumentType.Null:
+			result.push(null);
+			break;
+		case ArgumentType.Vector: {
+			const x = reader.readF32();
+			const y = reader.readF32();
+			const z = reader.readF32();
+			result.push({ x: x, y: y, z: z });
+			break;
+		}
+		case ArgumentType.HalfVector: {
+			const x = reader.readF16();
+			const y = reader.readF16();
+			const z = reader.readF16();
+			result.push({ x: x, y: y, z: z });
+			break;
+		}
+		case ArgumentType.ZeroVector:
+			result.push({ x: 0, y: 0, z: 0 });
+			break;
+		default:
+			if (type in dynamicArgMap) {
+				result.push(dynamicArgMap[type]);
+				break;
+			}
+
+			throw new Error(`Unknown argument type ${type}`);
+	}
+
+	const typeKey = ArgumentType[type] ? ArgumentType[type] : "DynArg";
+	if (!argStats[typeKey]) argStats[typeKey] = { count: 0, size: 0 };
+	argStats[typeKey].count++;
+	argStats[typeKey].size += reader.idx - start;
 }
 
 export function decompressRpcPacketsV5(bytes: Buffer) {
@@ -210,6 +253,16 @@ export function* decompressRpcPacketsV5Gen(bytes: Buffer): Generator<RPCPacket, 
 
 	// Get timestamp offset
 	const timestampOffset = reader.readF64();
+
+	const dynamicArgCount = reader.readByte();
+	if (debug_decompress) console.log(`Dynamic arg count: ${dynamicArgCount}`);
+	const dynamicArgs: Record<number, unknown> = {};
+	for (let i = 0; i < dynamicArgCount; i++) {
+		const argResult: unknown[] = [];
+		decompressArgument(reader, argResult);
+		const argIdx = i + lastArgType + 1; // Start after the last static argument type
+		dynamicArgs[argIdx] = argResult[0];
+	}
 
 	if (debug_decompress) console.log(`Timestamp offset: ${timestampOffset}`);
 
@@ -272,12 +325,18 @@ export function* decompressRpcPacketsV5Gen(bytes: Buffer): Generator<RPCPacket, 
 		if (hasTimestamp) timestamp = reader.decompressInt() + timestampOffset;
 		if (debug_decompress) console.log(` - Timestamp: ${timestamp}`);
 
-		const argLen = reader.decompressInt();
-		if (debug_decompress) console.log(` - Arg len: ${argLen}`);
-		let args: unknown[];
+		let args: unknown[] = [];
 		if (!isJsonBody) {
-			args = decompressArgs(reader, argLen);
+			const argCount = reader.readByte();
+			if (debug_decompress) console.log(` - Arg count: ${argCount}`);
+			for (let i = 0; i < argCount; i++) {
+				decompressArgument(reader, args, dynamicArgs);
+			}
+			// decompressArgs(reader);
 		} else {
+			const argLen = reader.decompressInt();
+			if (debug_decompress) console.log(` - Arg len: ${argLen}`);
+
 			let argStr = "";
 			for (let j = 0; j < argLen; j++) {
 				argStr += String.fromCharCode(reader.readByte());

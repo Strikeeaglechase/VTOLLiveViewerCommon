@@ -33,8 +33,6 @@ enum PacketFlags {
 enum ArgumentType {
 	ShortString, // Any ascii string, up to length 255
 	String, // Any ascii string, unlimited length
-	Zero, // Literal number 0
-	One, // Literal number 1
 	Byte, // 8 bit positive int
 	NegativeByte, // 8 bit negative int
 	Short, // 16 bit positive int
@@ -47,8 +45,11 @@ enum ArgumentType {
 	False, // Literal false
 	Null, // Literal null
 	Vector, // Vector3, 3 floats
-	ZeroVector // Vector3 with all components 0
+	ZeroVector, // Vector3 with all components 0
+	HalfVector // Vector3, 3 half floats
 }
+const lastArgType = ArgumentType.HalfVector as number; // We'll use the rest of the range above this value for dynamic arg mapping
+const allowedNumDynamicArgs = 2 ** 8 - lastArgType - 1;
 
 const bitCheck = (value: number, bit: number) => (value & bit) === bit;
 const isNum = (num?: string | number) => {
@@ -74,6 +75,26 @@ function allArgsCanCompress(args: unknown[]) {
 		if (typeof arg == "object" && "x" in arg && "y" in arg && "z" in arg) return true;
 		return false;
 	});
+}
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+const f16 = new Float16Array(1);
+const i16Ui8Arr = new Uint8Array(f16.buffer);
+function f16PrecisionLoss(num: number) {
+	f16[0] = num;
+	return Math.abs(f16[0] - num);
+}
+
+function f16ToBytes(num: number) {
+	f16[0] = num;
+
+	if (Math.abs(f16[0] - num) > 0.1) {
+		console.log(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
+		throw new Error(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
+	}
+
+	return i16Ui8Arr;
 }
 
 const f32 = new Float32Array(1);
@@ -124,16 +145,6 @@ function compressString(str: string, result: number[]) {
 }
 
 function compressNumber(num: number, result: number[]) {
-	if (num === 0) {
-		result.push(ArgumentType.Zero);
-		return;
-	}
-
-	if (num === 1) {
-		result.push(ArgumentType.One);
-		return;
-	}
-
 	if (Math.floor(num) != num) {
 		result.push(ArgumentType.Float);
 		result.append(f32ToBytes(num));
@@ -163,26 +174,42 @@ function compressNumber(num: number, result: number[]) {
 	result.append(f64ToBytes(num));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-function
-function compressArgs(args: unknown[]) {
-	const result: number[] = [];
-	args.forEach(arg => {
-		if (typeof arg == "string") {
-			compressString(arg, result);
-		} else if (typeof arg == "number") {
-			compressNumber(arg, result);
-		} else if (typeof arg == "boolean") {
-			result.push(arg ? ArgumentType.True : ArgumentType.False);
-		} else if (arg === null) {
-			result.push(ArgumentType.Null);
-		} else if (typeof arg == "object" && "x" in arg && "y" in arg && "z" in arg) {
-			if (arg.x === 0 && arg.y === 0 && arg.z === 0) {
-				result.push(ArgumentType.ZeroVector);
+function compressArgument(arg: unknown, result: number[]) {
+	if (typeof arg == "string") {
+		compressString(arg, result);
+	} else if (typeof arg == "number") {
+		compressNumber(arg, result);
+	} else if (typeof arg == "boolean") {
+		result.push(arg ? ArgumentType.True : ArgumentType.False);
+	} else if (arg === null) {
+		result.push(ArgumentType.Null);
+	} else if (typeof arg == "object" && "x" in arg && "y" in arg && "z" in arg) {
+		if (arg.x === 0 && arg.y === 0 && arg.z === 0) {
+			result.push(ArgumentType.ZeroVector);
+		} else {
+			const a = arg as { x: number; y: number; z: number };
+			const xPl = f16PrecisionLoss(a.x);
+			const yPl = f16PrecisionLoss(a.y);
+			const zPl = f16PrecisionLoss(a.z);
+			if (xPl < 0.01 && yPl < 0.01 && zPl < 0.01) {
+				result.push(ArgumentType.HalfVector);
+				result.append(f16ToBytes(a.x)).append(f16ToBytes(a.y)).append(f16ToBytes(a.z));
 			} else {
-				const a = arg as { x: number; y: number; z: number };
 				result.push(ArgumentType.Vector);
 				result.append(f32ToBytes(a.x)).append(f32ToBytes(a.y)).append(f32ToBytes(a.z));
 			}
+		}
+	}
+}
+
+function compressArgs(packet: PacketWithStrArgs, dynamicArgsMap: Record<string, number>) {
+	const result: number[] = [];
+	packet.args.forEach((arg, idx) => {
+		const key = packet.strArgs[idx];
+		if (key in dynamicArgsMap) {
+			result.push(dynamicArgsMap[key]);
+		} else {
+			compressArgument(arg, result);
 		}
 	});
 
@@ -218,7 +245,68 @@ function getIntCompressor(result: number[]) {
 	};
 }
 
-function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean) {
+function bhash(value: unknown) {
+	if (value === null) return "null";
+	if (value === undefined) return "undefined";
+
+	if (typeof value == "object") {
+		if ("x" in value && "y" in value && "z" in value) {
+			const v = value as { x: number; y: number; z: number };
+			return v.x + "-" + v.y + "-" + v.z;
+		} else {
+			return JSON.stringify(value);
+		}
+	}
+
+	return typeof value + value?.toString();
+}
+
+function createDynamicArgs(rpcs: PacketWithStrArgs[]) {
+	const dynamicArgMap: Record<string, { count: number; bin: number[]; value: unknown }> = {};
+
+	rpcs.forEach(packet => {
+		if (!allArgsCanCompress(packet.args)) return;
+		packet.strArgs = packet.args.map(bhash);
+
+		packet.args.forEach((arg, idx) => {
+			// const key = JSON.stringify(arg);
+			const key = packet.strArgs[idx];
+			if (dynamicArgMap[key]) {
+				dynamicArgMap[key].count++;
+			} else {
+				// const binRepr: number[] = [];
+				// compressArgument(arg, binRepr);
+				dynamicArgMap[key] = { count: 1, value: arg, bin: [] };
+			}
+		});
+	});
+
+	const dynamicArgMapArray = Object.entries(dynamicArgMap)
+		.map(([key, value]) => ({
+			key,
+			count: value.count,
+			bin: value.bin,
+			value: value.value
+		}))
+		.filter(v => v.count > 1)
+		.filter(v => v.bin.length > 1);
+
+	dynamicArgMapArray.sort((a, b) => b.count * b.bin.length - a.count * b.bin.length);
+	const argsToInclude = dynamicArgMapArray.slice(0, allowedNumDynamicArgs);
+	argsToInclude.forEach(arg => {
+		compressArgument(arg.value, arg.bin);
+	});
+
+	return dynamicArgMapArray.slice(0, allowedNumDynamicArgs);
+}
+
+interface PacketWithStrArgs extends RPCPacket {
+	strArgs: string[];
+}
+
+function compressRpcPackets(rpcPacketsWithoutArgInfo: RPCPacket[], includeTimestamps: boolean) {
+	// const rpcPackets = addStrArgsInfo(rpcPacketsWithoutArgInfo);
+	const rpcPackets = rpcPacketsWithoutArgInfo as PacketWithStrArgs[];
 	if (rpcPackets.length == 0) {
 		console.log(`compressRpcPackets called with 0 packets`);
 		return [];
@@ -237,7 +325,7 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 			console.log(JSON.stringify(rpcPackets));
 			throw new Error("All packets must have a timestamp if any do");
 		} else {
-			rpcPackets = rpcPackets.sort((a, b) => a.timestamp! - b.timestamp!);
+			rpcPackets.sort((a, b) => a.timestamp! - b.timestamp!);
 		}
 	}
 
@@ -294,6 +382,15 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 
 	result.append(f64ToBytes(timestampOffset));
 
+	const dynamicArgs = createDynamicArgs(rpcPackets);
+	const dynamicArgsMap: Record<string, number> = {};
+	dynamicArgs.forEach((arg, idx) => {
+		dynamicArgsMap[arg.key] = idx + lastArgType + 1; // Start after the last static argument type
+	});
+	const dynamicArgData = dynamicArgs.map(arg => arg.bin).flat();
+	result.push(dynamicArgs.length);
+	result.append(dynamicArgData);
+
 	// Add rpc packets
 	// RPC Packet format: {classNameIdx} {methodNameIdx} {PacketFlags} {idIdx} {arglen} [arg str]
 	result.append(i32ToBytes(rpcPackets.length));
@@ -303,6 +400,7 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 			const idIsNum = isNum(packet.id);
 			const classNameIdx = stringsMap[packet.className.toString()];
 			const methodIdx = stringsMap[packet.method.toString()];
+			const shortIndexMode = classNameIdx < 16 && methodIdx < 16;
 
 			let packetFlags = 0;
 
@@ -310,11 +408,11 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 			if (packet.id && idIsNum) packetFlags |= PacketFlags.IdIsNumber;
 			if (packet.id) packetFlags |= PacketFlags.HasId;
 			if (packet.timestamp != undefined && includeTimestamps) packetFlags |= PacketFlags.HasTimestamp;
-			if (classNameIdx < 16 && methodIdx < 16) packetFlags |= PacketFlags.ShortStringIndexMode;
+			if (shortIndexMode) packetFlags |= PacketFlags.ShortStringIndexMode;
 
 			result.push(packetFlags);
 
-			if (classNameIdx < 16 && methodIdx < 16) {
+			if (shortIndexMode) {
 				const shortStrIdx = (classNameIdx << 4) | methodIdx;
 				result.push(shortStrIdx);
 			} else {
@@ -335,9 +433,10 @@ function compressRpcPackets(rpcPackets: RPCPacket[], includeTimestamps: boolean)
 			}
 
 			if (argCompress) {
-				const args = compressArgs(packet.args);
+				const args = compressArgs(packet, dynamicArgsMap);
 				if (args.length > 2 ** 16) throw new Error(`Binary Arguments too long (${args.length})`);
-				compressIntAndPush(args.length);
+				// compressIntAndPush(args.length);
+				result.push(packet.args.length);
 				result.append(args);
 			} else {
 				const argStr = filterAsciiStr(JSON.stringify(packet.args));
