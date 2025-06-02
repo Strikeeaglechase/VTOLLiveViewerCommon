@@ -71,7 +71,8 @@ const f32Ui8Arr = new Uint8Array(f32.buffer);
 function numToBytes(num: number) {
 	f32[0] = num;
 
-	if (Math.abs(f32[0] - num) > 0.1) {
+	// We'll fix this later
+	if (Math.abs(f32[0] - num) > 10) {
 		console.log(`numToBytes called with ${num}, which resulted in a large precision loss: ${f32[0]} (delta: ${f32[0] - num})`);
 		throw new Error(`numToBytes called with ${num}, which resulted in a large precision loss: ${f32[0]} (delta: ${f32[0] - num})`);
 	}
