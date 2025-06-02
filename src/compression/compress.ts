@@ -1,7 +1,7 @@
 import { RPCPacket } from "../rpc.js";
 import { debug_compress, debug_packet_structure } from "./vtcompression.js";
 
-const VERSION = 4;
+export const VERSION = 4;
 class Index {
 	private value = 0;
 
