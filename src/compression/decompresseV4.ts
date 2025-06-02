@@ -9,9 +9,11 @@ try {
 	if (!window) {
 		console.error("Buffer is not defined and window is not available. Cannot proceed with decompression.");
 	} else {
-		// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-		// @ts-ignore
-		window.Buffer = buffer.Buffer;
+		if (window) {
+			// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+			// @ts-ignore
+			window.Buffer = buffer.Buffer;
+		}
 	}
 }
 
