@@ -6,7 +6,9 @@ try {
 	const x = Buffer.from("");
 } catch (e) {
 	console.warn("Buffer not defined, using global Buffer");
-	if (!window) {
+	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+	// @ts-ignore
+	if (!this || this == undefined || !("window" in this)) {
 		console.error("Buffer is not defined and window is not available. Cannot proceed with decompression.");
 	} else {
 		if (window) {
