@@ -75,7 +75,7 @@ function* genEmpty(): Generator<RPCPacket, void, unknown> {
 function decompressRpcPacketsGen(bytes: Buffer): Generator<RPCPacket, void, unknown> {
 	if (bytes.length == 0) return genEmpty();
 	const version = bytes[0];
-	if (version < 1 || version >= VERSION) {
+	if (!numIsVersion(version)) {
 		console.error(`Invalid version for decompress, expected 1-${VERSION}, got ${version}`);
 		// console.error(`Data:`);
 		// console.error("[" + bytes.join(",") + "]");
