@@ -8,14 +8,18 @@ try {
 	console.warn("Buffer not defined, using global Buffer");
 	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-ignore
-	if (!this || this == undefined || !("window" in this)) {
-		console.error("Buffer is not defined and window is not available. Cannot proceed with decompression.");
-	} else {
-		if (window) {
-			// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-			// @ts-ignore
-			window.Buffer = buffer.Buffer;
+	try {
+		if (!self || self == undefined || !("window" in self) || !self.document) {
+			console.error("Buffer is not defined and window is not available. Cannot proceed with decompression.");
+		} else {
+			if (window) {
+				// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+				// @ts-ignore
+				window.Buffer = buffer.Buffer;
+			}
 		}
+	} catch (e) {
+		console.error(`Exception when trying to check self: ${e}`);
 	}
 }
 
