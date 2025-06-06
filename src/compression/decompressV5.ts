@@ -1,27 +1,9 @@
 import { RPCPacket } from "../rpc.js";
 import { bitCheck, Index } from "./compress.js";
+import { loadPolyfills } from "./pollyfillLoader.js";
 import { debug_decompress } from "./vtcompression.js";
 
-try {
-	const x = Buffer.from("");
-} catch (e) {
-	console.warn("Buffer not defined, using global Buffer");
-	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-	// @ts-ignore
-	try {
-		if (!self || self == undefined || !("window" in self) || !self.document) {
-			console.error("Buffer is not defined and window is not available. Cannot proceed with decompression.");
-		} else {
-			if (window) {
-				// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-				// @ts-ignore
-				window.Buffer = buffer.Buffer;
-			}
-		}
-	} catch (e) {
-		console.error(`Exception when trying to check self: ${e}`);
-	}
-}
+loadPolyfills();
 
 enum PacketFlags {
 	HasId = 0b00000001,
@@ -47,9 +29,11 @@ enum ArgumentType {
 	Null, // Literal null
 	Vector, // Vector3, 3 floats
 	ZeroVector, // Vector3 with all components 0
-	HalfVector // Vector3, 3 half floats
+	HalfVector, // Vector3, 3 half floats
+	FlaggedVector // A vector with bit flags
 }
-const lastArgType = ArgumentType.HalfVector as number;
+
+const lastArgType = ArgumentType.FlaggedVector as number; // We'll use the rest of the range above this value for dynamic arg mapping
 
 class Reader {
 	private index = 0;
@@ -126,7 +110,14 @@ class Reader {
 	}
 }
 
+/*
 const argStats: Record<string, { count: number; size: number }> = {} as any;
+const flaggedVectorStats = {
+	total: 0,
+	numComponents: 0,
+	numFloat16: 0
+};
+
 export function printStats() {
 	console.log("Argument type stats:");
 	let totalBytes = 0;
@@ -143,7 +134,43 @@ export function printStats() {
 		console.log(` - ${type}: ${stats.count}, ${stats.size} bytes, ${prec.toFixed(2)}%`);
 	});
 
+	console.log(`Flagged vector stats:`);
+	console.log(` - Total: ${flaggedVectorStats.total}`);
+	console.log(` - Average components per vector: ${(flaggedVectorStats.numComponents / flaggedVectorStats.total).toFixed(2)}`);
+	console.log(` - Float16 rate: ${((flaggedVectorStats.numFloat16 / flaggedVectorStats.numComponents) * 100).toFixed(2)}%`);
 	// console.log(`Zero vector counts: ${propZeroCounts}`);
+}
+*/
+
+function decompressFlaggedVector(reader: Reader, result: unknown[]) {
+	const flagFloat16 = 0b01;
+	const flagZero = 0b10;
+
+	const flags = reader.readByte();
+
+	const vector = { x: 0, y: 0, z: 0 };
+	const compKeys = ["x", "y", "z"];
+	// flaggedVectorStats.total++;
+	compKeys.forEach((key, i) => {
+		const compFlag = (flags >> (i * 2)) & 0b11;
+		const isZero = bitCheck(compFlag, flagZero);
+		const isFloat16 = bitCheck(compFlag, flagFloat16);
+
+		if (isZero) return;
+		// flaggedVectorStats.numComponents++;
+		if (isFloat16) {
+			vector[key] = reader.readF16();
+			// flaggedVectorStats.numFloat16++;
+		} else {
+			vector[key] = reader.readF32();
+		}
+	});
+
+	if (debug_decompress) {
+		console.log(`Flagged vector: ${JSON.stringify(vector)} with flags: ${flags.toString(2).padStart(8, "0")}`);
+	}
+
+	result.push(vector);
 }
 
 function decompressArgument(reader: Reader, result: unknown[], dynamicArgMap: Record<number, unknown> = {}) {
@@ -212,6 +239,16 @@ function decompressArgument(reader: Reader, result: unknown[], dynamicArgMap: Re
 		case ArgumentType.ZeroVector:
 			result.push({ x: 0, y: 0, z: 0 });
 			break;
+		// case ArgumentType.PartialVector:
+		// 	decompressPartialVector(reader, result, false);
+		// 	break;
+		// case ArgumentType.PartialHalfVector:
+		// 	decompressPartialVector(reader, result, true);
+		// 	break;
+		case ArgumentType.FlaggedVector: {
+			decompressFlaggedVector(reader, result);
+			break;
+		}
 		default:
 			if (type in dynamicArgMap) {
 				result.push(dynamicArgMap[type]);
@@ -221,10 +258,10 @@ function decompressArgument(reader: Reader, result: unknown[], dynamicArgMap: Re
 			throw new Error(`Unknown argument type ${type}`);
 	}
 
-	const typeKey = ArgumentType[type] ? ArgumentType[type] : "DynArg";
-	if (!argStats[typeKey]) argStats[typeKey] = { count: 0, size: 0 };
-	argStats[typeKey].count++;
-	argStats[typeKey].size += reader.idx - start;
+	// const typeKey = ArgumentType[type] ? ArgumentType[type] : "DynArg";
+	// if (!argStats[typeKey]) argStats[typeKey] = { count: 0, size: 0 };
+	// argStats[typeKey].count++;
+	// argStats[typeKey].size += reader.idx - start;
 }
 
 export function decompressRpcPacketsV5(bytes: Buffer) {

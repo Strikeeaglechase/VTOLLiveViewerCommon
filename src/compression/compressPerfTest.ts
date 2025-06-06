@@ -3,7 +3,7 @@ import { RPCPacket } from "../rpc.js";
 import { compressRpcPackets } from "./compress.js";
 import { decompressRpcPackets } from "./vtcompression.js";
 import _ from "lodash";
-import { printStats } from "./decompressV5.js";
+// import { printStats } from "./decompressV5.js";
 
 const fileContent = fs.readFileSync("../../test_rpcs.json", "utf-8");
 const chunkedRpcs: RPCPacket[][] = JSON.parse(fileContent);
@@ -29,7 +29,7 @@ const decompressedChunks = compressedChunks.map(compressed => {
 const decompressDur = performance.now() - decompressStart;
 const decompressPacketsPerSecond = Math.round(totalRpcs / (decompressDur / 1000));
 console.log(`Decompression took ${decompressDur.toFixed(0)}ms (${decompressPacketsPerSecond.toFixed(0)} pps)`);
-printStats();
+// printStats();
 
 function assert(condition: boolean, message: string) {
 	if (!condition) {
