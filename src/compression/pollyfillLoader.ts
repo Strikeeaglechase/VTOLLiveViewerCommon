@@ -58,5 +58,15 @@ function loadFloat16() {
 
 export function loadPolyfills() {
 	loadBuffer();
-	loadFloat16();
+	// loadFloat16();
+}
+
+export function doesF16Exist() {
+	try {
+		// @ts-ignore
+		const f16Arr = new Float16Array(1);
+		return true;
+	} catch (e) {
+		return false;
+	}
 }

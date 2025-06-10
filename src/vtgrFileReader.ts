@@ -1,10 +1,12 @@
 import { Readable } from "stream";
 import unzipper, { File } from "unzipper";
-import { VTGRHeader } from "./shared.js";
+
 import { decompressRpcPackets } from "./compression/vtcompression.js";
 import { RPCPacket } from "./rpc.js";
+import { VTGRHeader } from "./shared.js";
 
 type RPCCallback = (rpc: RPCPacket) => void;
+type ChunkedCallback = (rpcs: RPCPacket[]) => void;
 
 class VTGRBodyReader {
 	private buffers: Buffer[] = [];
@@ -35,6 +37,43 @@ class VTGRBodyReader {
 		const chunk = buffer.subarray(0, currentChunkSize);
 		const chunkPackets = decompressRpcPackets(chunk);
 		chunkPackets.forEach(p => this.cb(p));
+
+		const rest = buffer.subarray(currentChunkSize);
+		this.currentSize = rest.length;
+		this.buffers = [rest];
+		this.currentChunkIndex++;
+	}
+}
+
+class ChunkedVTGRBodyReader {
+	private buffers: Buffer[] = [];
+	private currentSize = 0;
+	public totalSize = 0;
+
+	private currentChunkIndex = 0;
+	constructor(private header: VTGRHeader, stream: Readable, private cb: ChunkedCallback) {
+		stream.on("data", data => {
+			this.totalSize += data.length;
+			this.currentSize += data.length;
+
+			this.buffers.push(data);
+
+			if (this.currentSize >= this.header.chunks[this.currentChunkIndex].length) {
+				this.readNextChunk();
+			}
+		});
+
+		stream.on("end", () => {
+			this.readNextChunk();
+		});
+	}
+
+	private async readNextChunk() {
+		const currentChunkSize = this.header.chunks[this.currentChunkIndex] ? this.header.chunks[this.currentChunkIndex].length : this.currentSize;
+		const buffer = Buffer.concat(this.buffers);
+		const chunk = buffer.subarray(0, currentChunkSize);
+		const chunkPackets = decompressRpcPackets(chunk);
+		this.cb(chunkPackets);
 
 		const rest = buffer.subarray(currentChunkSize);
 		this.currentSize = rest.length;
@@ -123,23 +162,31 @@ class VTGRReader {
 	}
 
 	public async parseAll() {
+		const packets: RPCPacket[] = [];
+		await this.parse(rpc => packets.push(rpc));
+		return packets;
+	}
+
+	public async parseChunked(cb: ChunkedCallback) {
 		const header = await this.getHeader();
 		const bodyStream = await this.getBody();
 
-		return new Promise<RPCPacket[]>((resolve, reject) => {
-			const packets: RPCPacket[] = [];
-			const bodyReader = new VTGRBodyReader(header, bodyStream, rpc => {
-				packets.push(rpc);
-			});
+		const bodyReader = new ChunkedVTGRBodyReader(header, bodyStream, cb);
 
+		return new Promise<void>((resolve, reject) => {
 			bodyStream.on("end", () => {
-				resolve(packets);
+				resolve();
 			});
-
 			bodyStream.on("error", err => {
 				reject(err);
 			});
 		});
+	}
+
+	public async parseChunkedAll() {
+		const packets: RPCPacket[][] = [];
+		await this.parseChunked(chunk => packets.push(chunk));
+		return packets;
 	}
 }
 

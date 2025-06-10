@@ -255,7 +255,7 @@ class RPCController {
 		switch (rpc.type) {
 			case "instance": {
 				const instanceList = this.instance.instances[packet.className];
-				if (!instanceList) return console.warn(`No existing instance for ${packet.className} (id: ${packet.id})`, packet);
+				if (!instanceList) return console.warn(`No existing instance list for ${packet.className} (id: ${packet.id})`, packet);
 				const instance = instanceList[packet.id];
 				if (!instance) return console.warn(`No existing instance for ${packet.className} (id: ${packet.id})`, packet);
 				if (!instance[packet.method]) return console.warn(`No RPC method ${packet.className}.${packet.method}`, packet);

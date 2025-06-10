@@ -1,6 +1,9 @@
+import { Float16Array } from "@petamoriken/float16";
+
 import { RPCPacket } from "../rpc.js";
-import { bitCheck, Index } from "./compress.js";
-import { loadPolyfills } from "./pollyfillLoader.js";
+import { bitCheck } from "./compress.js";
+import { convertToNumber } from "./f16Converter.js";
+import { doesF16Exist, loadPolyfills } from "./pollyfillLoader.js";
 import { debug_decompress } from "./vtcompression.js";
 
 loadPolyfills();
@@ -40,14 +43,21 @@ class Reader {
 	private f16Buffer = Buffer.alloc(2);
 	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-ignore
-	private f16View = new Float16Array(this.f16Buffer.buffer);
-	private f16ByteView = new Uint8Array(this.f16Buffer.buffer);
+	private f16View: Float16Array; //= new Float16Array(this.f16Buffer.buffer);
+	private f16ByteView: Uint8Array; // = new Uint8Array(this.f16Buffer.buffer);
 
 	public get idx() {
 		return this.index;
 	}
 
-	constructor(private buf: Buffer) {}
+	constructor(private buf: Buffer) {
+		if (doesF16Exist()) {
+			this.f16View = new Float16Array(this.f16Buffer.buffer);
+			this.f16ByteView = new Uint8Array(this.f16Buffer.buffer);
+		} else {
+			// console.log(`No Float16Array available, using custom implementation`);
+		}
+	}
 
 	public read(length: number) {
 		const result = this.buf.subarray(this.index, this.index + length);
@@ -72,10 +82,15 @@ class Reader {
 		const upperByte = this.buf.readUInt8(this.index + 1);
 		this.index += 2;
 
-		this.f16ByteView[0] = lowerByte;
-		this.f16ByteView[1] = upperByte;
+		if (this.f16ByteView) {
+			this.f16ByteView[0] = lowerByte;
+			this.f16ByteView[1] = upperByte;
 
-		return this.f16View[0];
+			return this.f16View[0];
+		} else {
+			const bits = (upperByte << 8) | lowerByte;
+			return convertToNumber(bits);
+		}
 	}
 
 	public readI32() {

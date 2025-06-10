@@ -1,6 +1,7 @@
 *.bin
 test-*
 test_*
+*.vtgr
 # Logs
 logs
 *.log

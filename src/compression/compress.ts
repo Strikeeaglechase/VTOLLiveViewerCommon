@@ -1,5 +1,6 @@
 import { RPCPacket } from "../rpc.js";
-import { loadPolyfills } from "./pollyfillLoader.js";
+import { convertToNumber, roundToFloat16Bits } from "./f16Converter.js";
+import { doesF16Exist, loadPolyfills } from "./pollyfillLoader.js";
 
 loadPolyfills();
 
@@ -86,22 +87,34 @@ function allArgsCanCompress(args: unknown[]) {
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-const f16 = new Float16Array(1);
-const i16Ui8Arr = new Uint8Array(f16.buffer);
+const f16 = doesF16Exist() ? new Float16Array(1) : null;
+const i16Ui8Arr = f16 ? new Uint8Array(f16.buffer) : null;
 function f16PrecisionLoss(num: number) {
-	f16[0] = num;
-	return Math.abs(f16[0] - num);
+	if (f16) {
+		f16[0] = num;
+		return Math.abs(f16[0] - num);
+	} else {
+		return Math.abs(convertToNumber(roundToFloat16Bits(num)) - num);
+	}
 }
 
 function f16ToBytes(num: number) {
-	f16[0] = num;
+	if (f16) {
+		f16[0] = num;
 
-	if (Math.abs(f16[0] - num) > 0.1) {
-		console.log(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
-		throw new Error(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
+		if (Math.abs(f16[0] - num) > 0.1) {
+			console.log(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
+			throw new Error(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
+		}
+
+		return i16Ui8Arr;
+	} else {
+		const bits = roundToFloat16Bits(num);
+		return [
+			bits & 0x00ff, // Lower byte
+			(bits >> 8) & 0x00ff // Upper byte
+		];
 	}
-
-	return i16Ui8Arr;
 }
 
 const f32 = new Float32Array(1);
