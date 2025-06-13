@@ -13,7 +13,8 @@ enum PacketFlags {
 	JSONBody = 0b00000010,
 	IdIsNumber = 0b00000100,
 	HasTimestamp = 0b00001000,
-	ShortStringIndexMode = 0b00010000
+	ShortStringIndexMode = 0b00010000,
+	IdIsUlong = 0b00100000
 }
 
 enum ArgumentType {
@@ -93,13 +94,19 @@ class Reader {
 		}
 	}
 
-	public readI32() {
+	public readU64() {
+		const result = this.buf.readBigUInt64LE(this.index);
+		this.index += 8;
+		return result;
+	}
+
+	public readU32() {
 		const result = this.buf.readUInt32LE(this.index);
 		this.index += 4;
 		return result;
 	}
 
-	public readI16() {
+	public readU16() {
 		const result = this.buf.readUInt16LE(this.index);
 		this.index += 2;
 		return result;
@@ -217,16 +224,16 @@ function decompressArgument(reader: Reader, result: unknown[], dynamicArgMap: Re
 			result.push(-reader.readByte());
 			break;
 		case ArgumentType.Short:
-			result.push(reader.readI16());
+			result.push(reader.readU16());
 			break;
 		case ArgumentType.NegativeShort:
-			result.push(-reader.readI16());
+			result.push(-reader.readU16());
 			break;
 		case ArgumentType.Int:
-			result.push(reader.readI32());
+			result.push(reader.readU32());
 			break;
 		case ArgumentType.NegativeInt:
-			result.push(-reader.readI32());
+			result.push(-reader.readU32());
 			break;
 		case ArgumentType.Float:
 			result.push(reader.readF32());
@@ -328,12 +335,13 @@ export function* decompressRpcPacketsV5Gen(bytes: Buffer): Generator<RPCPacket, 
 
 	// RPC Packet format: {classNameIdx} {methodNameIdx} {hasId} {idIdx} {arglen} [arg str]
 	// Read rpc packets
-	const numRpcPackets = reader.readI32();
+	const numRpcPackets = reader.readU32();
 	if (debug_decompress) console.log(`RPC Count: ${numRpcPackets}`);
 	for (let i = 0; i < numRpcPackets; i++) {
 		const packetFlags = reader.readByte();
 		const idIsNum = bitCheck(packetFlags, PacketFlags.IdIsNumber);
 		const hasId = bitCheck(packetFlags, PacketFlags.HasId);
+		const idIsUlong = bitCheck(packetFlags, PacketFlags.IdIsUlong);
 		const hasTimestamp = bitCheck(packetFlags, PacketFlags.HasTimestamp);
 		const shortIndexMode = bitCheck(packetFlags, PacketFlags.ShortStringIndexMode);
 		const isJsonBody = bitCheck(packetFlags, PacketFlags.JSONBody);
@@ -374,7 +382,11 @@ export function* decompressRpcPacketsV5Gen(bytes: Buffer): Generator<RPCPacket, 
 		let id: string | undefined = undefined;
 		if (hasId) {
 			if (idIsNum) {
-				id = reader.decompressInt().toString();
+				if (idIsUlong) {
+					id = reader.readU64().toString();
+				} else {
+					id = reader.decompressInt().toString();
+				}
 			} else {
 				id = getStrFromIdx();
 			}

@@ -1,11 +1,13 @@
 import { RPCPacket } from "../rpc.js";
 import { convertToNumber, roundToFloat16Bits } from "./f16Converter.js";
 import { doesF16Exist, loadPolyfills } from "./pollyfillLoader.js";
+import { decompressRpcPackets } from "./vtcompression.js";
 
 loadPolyfills();
 
 const VERSION = 5;
 const vectorAllowedPrecisionLoss = 0.01; // The maximum allowed precision loss for vectors to be compressed as half floats
+const validateCompressedData = false;
 
 class Index {
 	private value = 0;
@@ -32,7 +34,8 @@ enum PacketFlags {
 	JSONBody = 0b00000010,
 	IdIsNumber = 0b00000100,
 	HasTimestamp = 0b00001000,
-	ShortStringIndexMode = 0b00010000
+	ShortStringIndexMode = 0b00010000,
+	IdIsUlong = 0b00100000
 }
 
 enum ArgumentType {
@@ -150,6 +153,14 @@ function i32ToBytes(num: number) {
 	return i32Ui8Arr;
 }
 
+const u64 = new BigUint64Array(1);
+const u64Ui8Arr = new Uint8Array(u64.buffer);
+function u64ToBytes(num: string | bigint) {
+	u64[0] = BigInt(num);
+
+	return u64Ui8Arr;
+}
+
 function compressString(str: string, result: number[]) {
 	str = filterAsciiStr(str);
 
@@ -165,6 +176,10 @@ function compressString(str: string, result: number[]) {
 }
 
 function compressNumber(num: number, result: number[]) {
+	if (num > Number.MAX_SAFE_INTEGER || num < Number.MIN_SAFE_INTEGER) {
+		console.warn(`compressNumber called with ${num}, which is outside the safe integer range`);
+	}
+
 	if (Math.floor(num) != num) {
 		result.push(ArgumentType.Float);
 		result.append(f32ToBytes(num));
@@ -484,6 +499,7 @@ function compressRpcPackets(rpcPacketsWithoutArgInfo: RPCPacket[], includeTimest
 		try {
 			const argCompress = allArgsCanCompress(packet.args);
 			const idIsNum = isNum(packet.id);
+			const idIsUlong = idIsNum && BigInt(packet.id) > Number.MAX_SAFE_INTEGER;
 			const classNameIdx = stringsMap[packet.className.toString()];
 			const methodIdx = stringsMap[packet.method.toString()];
 			const shortIndexMode = classNameIdx < 16 && methodIdx < 16;
@@ -495,6 +511,7 @@ function compressRpcPackets(rpcPacketsWithoutArgInfo: RPCPacket[], includeTimest
 			if (packet.id) packetFlags |= PacketFlags.HasId;
 			if (packet.timestamp != undefined && includeTimestamps) packetFlags |= PacketFlags.HasTimestamp;
 			if (shortIndexMode) packetFlags |= PacketFlags.ShortStringIndexMode;
+			if (idIsUlong) packetFlags |= PacketFlags.IdIsUlong;
 
 			result.push(packetFlags);
 
@@ -508,7 +525,11 @@ function compressRpcPackets(rpcPacketsWithoutArgInfo: RPCPacket[], includeTimest
 
 			if (packet.id) {
 				if (idIsNum) {
-					compressIntAndPush(parseInt(packet.id.toString()));
+					if (idIsUlong) {
+						result.append(u64ToBytes(packet.id));
+					} else {
+						compressIntAndPush(parseInt(packet.id.toString()));
+					}
 				} else {
 					pushStrIdx(packet.id.toString());
 				}
@@ -543,6 +564,18 @@ function compressRpcPackets(rpcPacketsWithoutArgInfo: RPCPacket[], includeTimest
 	// metrics.argSize += argSize;
 	// metrics.argTotal += argTotal;
 	// metrics.rpcsTotal += rpcPackets.length;
+
+	if (validateCompressedData) {
+		const decompressed = decompressRpcPackets(Buffer.from(result));
+		decompressed.forEach((decompressedPacket, idx) => {
+			const originalPacket = rpcPackets[idx];
+			if (!originalPacket.id) return;
+			if (originalPacket.id != decompressedPacket.id) {
+				console.log({ orgId: originalPacket.id, decompId: decompressedPacket.id, idx, originalPacket, decompressedPacket });
+				throw new Error(`Decompressed packet id does not match original packet id at index ${idx}: ${originalPacket.id} != ${decompressedPacket.id}`);
+			}
+		});
+	}
 
 	return result;
 }
