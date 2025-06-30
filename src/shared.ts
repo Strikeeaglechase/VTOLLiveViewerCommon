@@ -86,8 +86,19 @@ export interface MissionInfoWithoutSpawns {
 	isBuiltin: boolean;
 }
 
+export interface MissionSpawnInfo {
+	name: string;
+	id: number;
+	vehicle: string;
+	unitGroup: string;
+	initialSlotCount: number;
+
+	slotCount: number;
+	altSpawns: MissionSpawnInfo[];
+}
+
 export interface MissionInfo extends MissionInfoWithoutSpawns {
-	spawns: { name: string; id: number; vehicle: string; unitGroup: string; slotCount: number }[];
+	spawns: MissionSpawnInfo[];
 	allUnitSpawns: { name: string; id: number }[];
 	waypoints: { name: string; id: number; position: Vector3 }[];
 	bullseye: Record<Team, number>;
