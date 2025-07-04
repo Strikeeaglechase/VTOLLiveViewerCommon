@@ -167,6 +167,8 @@ export function printStats() {
 function decompressFlaggedVector(reader: Reader, result: unknown[]) {
 	const flagFloat16 = 0b01;
 	const flagZero = 0b10;
+	const flagXLong = 0b01000000;
+	const flagZLong = 0b10000000;
 
 	const flags = reader.readByte();
 
@@ -177,10 +179,14 @@ function decompressFlaggedVector(reader: Reader, result: unknown[]) {
 		const compFlag = (flags >> (i * 2)) & 0b11;
 		const isZero = bitCheck(compFlag, flagZero);
 		const isFloat16 = bitCheck(compFlag, flagFloat16);
+		const isLong = (key == "x" && bitCheck(flags, flagXLong)) || (key == "z" && bitCheck(flags, flagZLong));
 
 		if (isZero) return;
+
 		// flaggedVectorStats.numComponents++;
-		if (isFloat16) {
+		if (isLong) {
+			vector[key] = reader.readF64();
+		} else if (isFloat16) {
 			vector[key] = reader.readF16();
 			// flaggedVectorStats.numFloat16++;
 		} else {

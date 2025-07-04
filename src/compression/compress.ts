@@ -7,6 +7,7 @@ loadPolyfills();
 
 const VERSION = 5;
 const vectorAllowedPrecisionLoss = 0.01; // The maximum allowed precision loss for vectors to be compressed as half floats
+const vectorRequiredPrecisionLossForLong = 0.1;
 const validateCompressedData = false;
 
 class Index {
@@ -122,6 +123,11 @@ function f16ToBytes(num: number) {
 
 const f32 = new Float32Array(1);
 const f32Ui8Arr = new Uint8Array(f32.buffer);
+function f32PrecisionLoss(num: number) {
+	f32[0] = num;
+	return Math.abs(f32[0] - num);
+}
+
 function f32ToBytes(num: number) {
 	f32[0] = num;
 
@@ -220,14 +226,19 @@ function compressFlaggedVector(arg: { x: number; y: number; z: number }, result:
 	const zPl = f16PrecisionLoss(arg.z);
 	const canAllBeFloat16 = xPl < vectorAllowedPrecisionLoss && yPl < vectorAllowedPrecisionLoss && zPl < vectorAllowedPrecisionLoss;
 	const canAnyBeFloat16 = xPl < vectorAllowedPrecisionLoss || yPl < vectorAllowedPrecisionLoss || zPl < vectorAllowedPrecisionLoss;
+	const xRequiresLong = f32PrecisionLoss(arg.x) > vectorRequiredPrecisionLossForLong;
+	const zRequiresLong = f32PrecisionLoss(arg.z) > vectorRequiredPrecisionLossForLong;
+	const requiresLong = xRequiresLong || zRequiresLong;
 
 	const flagFloat16 = 0b01;
 	const flagZero = 0b10;
+	const flagXLong = 0b01000000;
+	const flagZLong = 0b10000000;
 
 	const pls = [xPl, yPl, zPl];
 	const components = [arg.x, arg.y, arg.z];
 
-	if (!components.some(c => c === 0)) {
+	if (!requiresLong && !components.some(c => c === 0)) {
 		if (canAllBeFloat16) {
 			result.push(ArgumentType.HalfVector);
 			result.append(f16ToBytes(arg.x)).append(f16ToBytes(arg.y)).append(f16ToBytes(arg.z));
@@ -252,9 +263,15 @@ function compressFlaggedVector(arg: { x: number; y: number; z: number }, result:
 
 		flags |= compFlag << (idx * 2);
 
+		const isXLong = idx == 0 && xRequiresLong;
+		const isZLong = idx == 2 && zRequiresLong;
+		if (isXLong) flags |= flagXLong;
+		if (isZLong) flags |= flagZLong;
+
 		return {
 			value: comp,
 			isFloat16: pl < vectorAllowedPrecisionLoss,
+			isLong: isXLong || isZLong,
 			isZero: comp === 0
 		};
 	});
@@ -263,7 +280,9 @@ function compressFlaggedVector(arg: { x: number; y: number; z: number }, result:
 
 	flaggedComponents.forEach(comp => {
 		if (comp.isZero) return;
-		if (comp.isFloat16) {
+		if (comp.isLong) {
+			result.append(f64ToBytes(comp.value));
+		} else if (comp.isFloat16) {
 			result.append(f16ToBytes(comp.value));
 		} else {
 			result.append(f32ToBytes(comp.value));

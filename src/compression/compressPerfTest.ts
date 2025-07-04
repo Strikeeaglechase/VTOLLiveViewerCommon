@@ -47,12 +47,6 @@ async function loadFile(filepath: string) {
 async function run() {
 	const chunkedRpcs = await loadFile("../../perfinput.vtgr");
 
-	chunkedRpcs.forEach(chunk => {
-		chunk.forEach(rpc => {
-			if (rpc.method == "UpdateMissionInfo") console.log(rpc);
-		});
-	});
-
 	console.log(`Loaded ${chunkedRpcs.length} chunks from VTGR file.`);
 	const jsonSize = chunkedRpcs.reduce((sum, chunk) => sum + JSON.stringify(chunk).length, 0);
 	let totalRpcs = 0;
