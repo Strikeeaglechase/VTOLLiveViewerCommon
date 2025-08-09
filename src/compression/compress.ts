@@ -108,7 +108,7 @@ function f16ToBytes(num: number) {
 
 		if (Math.abs(f16[0] - num) > 0.1) {
 			console.log(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
-			throw new Error(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
+			// throw new Error(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
 		}
 
 		return i16Ui8Arr;
@@ -133,7 +133,7 @@ function f32ToBytes(num: number) {
 
 	if (Math.abs(f32[0] - num) > 0.1) {
 		console.log(`numToBytes called with ${num}, which resulted in a large precision loss: ${f32[0]} (delta: ${f32[0] - num})`);
-		throw new Error(`numToBytes called with ${num}, which resulted in a large precision loss: ${f32[0]} (delta: ${f32[0] - num})`);
+		// throw new Error(`numToBytes called with ${num}, which resulted in a large precision loss: ${f32[0]} (delta: ${f32[0] - num})`);
 	}
 
 	return f32Ui8Arr;
@@ -153,7 +153,7 @@ function i32ToBytes(num: number) {
 
 	if (i32[0] != num) {
 		console.log(`i32ToBytes called with ${num}, which resulted in a large precision loss: ${i32[0]} (delta: ${i32[0] - num})`);
-		throw new Error(`i32ToBytes called with ${num}, which resulted in a large precision loss: ${i32[0]} (delta: ${i32[0] - num})`);
+		// throw new Error(`i32ToBytes called with ${num}, which resulted in a large precision loss: ${i32[0]} (delta: ${i32[0] - num})`);
 	}
 
 	return i32Ui8Arr;
@@ -358,8 +358,7 @@ function bhash(value: unknown) {
 
 	if (typeof value == "object") {
 		if ("x" in value && "y" in value && "z" in value) {
-			const v = value as { x: number; y: number; z: number };
-			return v.x + "-" + v.y + "-" + v.z;
+			return value.x + "-" + value.y + "-" + value.z;
 		} else {
 			return JSON.stringify(value);
 		}
