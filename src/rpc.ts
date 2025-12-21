@@ -24,6 +24,7 @@ interface RPCPacket {
 	args: any[];
 	id?: string;
 	timestamp?: number;
+	orgTimestamp?: number;
 	pid?: number;
 }
 
