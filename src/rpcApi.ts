@@ -25,6 +25,10 @@ export class Application {
 		this.onRpc("Application", "RawLobbySync", [], this);
 	}
 
+	public RawLobbySyncDone() {
+		this.onRpc("Application", "RawLobbySyncDone", [], this);
+	}
+
 }
 
 export class Client {
@@ -88,6 +92,106 @@ export class Client {
 	public on(event: "error", handler: (message: string) => void): void
 	public on(event: "adminSearchUsersResult", handler: (users: DbUserEntry[]) => void): void
 	public on(event: "newToken", handler: (token: string) => void): void
+	public on(event: string, handler: (...args: any[]) => void): void {
+		if (!this.listeners[event]) {
+			this.listeners[event] = [];
+		}
+
+		this.listeners[event].push(handler);
+	}
+}
+
+export class DebugLine {
+	private listeners: Record<string, Array<(...args: any[]) => void>> = {};
+
+	constructor(public id: string | number, private onRpc?: InstancedRpcCallback<DebugLine>) { }
+
+	public fireRpcEvent(packet: RPCPacket) {
+		if(packet.id != this.id) console.warn("RPC packet ID does not match instance ID:", packet.id, this.id);
+		// @ts-ignore
+		this.emit(packet.method, ...packet.args);
+	}
+
+	public emit(event: string, ...args: any[]) {
+		if (this.listeners[event]) {
+			this.listeners[event].forEach(handler => {
+				handler(...args);
+			});
+		}
+	}
+
+	
+	public SetStart(pos: Vector3) {
+		this.onRpc("DebugLine", "SetStart", this.id, [pos], this);
+	}
+
+	public SetEnd(pos: Vector3) {
+		this.onRpc("DebugLine", "SetEnd", this.id, [pos], this);
+	}
+
+	public SetColor(color: number) {
+		this.onRpc("DebugLine", "SetColor", this.id, [color], this);
+	}
+
+	public Hide() {
+		this.onRpc("DebugLine", "Hide", this.id, [], this);
+	}
+
+
+	public on(event: "SetStart", handler: (pos: Vector3) => void): void
+	public on(event: "SetEnd", handler: (pos: Vector3) => void): void
+	public on(event: "SetColor", handler: (color: number) => void): void
+	public on(event: "Hide", handler: () => void): void
+	public on(event: string, handler: (...args: any[]) => void): void {
+		if (!this.listeners[event]) {
+			this.listeners[event] = [];
+		}
+
+		this.listeners[event].push(handler);
+	}
+}
+
+export class DebugSphere {
+	private listeners: Record<string, Array<(...args: any[]) => void>> = {};
+
+	constructor(public id: string | number, private onRpc?: InstancedRpcCallback<DebugSphere>) { }
+
+	public fireRpcEvent(packet: RPCPacket) {
+		if(packet.id != this.id) console.warn("RPC packet ID does not match instance ID:", packet.id, this.id);
+		// @ts-ignore
+		this.emit(packet.method, ...packet.args);
+	}
+
+	public emit(event: string, ...args: any[]) {
+		if (this.listeners[event]) {
+			this.listeners[event].forEach(handler => {
+				handler(...args);
+			});
+		}
+	}
+
+	
+	public SetPosition(pos: Vector3) {
+		this.onRpc("DebugSphere", "SetPosition", this.id, [pos], this);
+	}
+
+	public SetScale(scale: number) {
+		this.onRpc("DebugSphere", "SetScale", this.id, [scale], this);
+	}
+
+	public SetColor(color: number) {
+		this.onRpc("DebugSphere", "SetColor", this.id, [color], this);
+	}
+
+	public Hide() {
+		this.onRpc("DebugSphere", "Hide", this.id, [], this);
+	}
+
+
+	public on(event: "SetPosition", handler: (pos: Vector3) => void): void
+	public on(event: "SetScale", handler: (scale: number) => void): void
+	public on(event: "SetColor", handler: (color: number) => void): void
+	public on(event: "Hide", handler: () => void): void
 	public on(event: string, handler: (...args: any[]) => void): void {
 		if (!this.listeners[event]) {
 			this.listeners[event] = [];
@@ -488,12 +592,27 @@ export class MessageHandler {
 		this.onRpc("MessageHandler", "DatalinkActorPos", this.id, [entityId, actorId, team, identityIndex, sensorSource, pos, vel, rwrPrecision], this);
 	}
 
+	public CreateDebugSphere(id: number) {
+		this.onRpc("MessageHandler", "CreateDebugSphere", this.id, [id], this);
+	}
+
+	public CreateDebugLine(id: number) {
+		this.onRpc("MessageHandler", "CreateDebugLine", this.id, [id], this);
+	}
+
+	public SyncTOD() {
+		this.onRpc("MessageHandler", "SyncTOD", this.id, [], this);
+	}
+
 
 	public on(event: "NetInstantiate", handler: (id: number, ownerId: string, path: string, pos: Vector3, rot: Vector3, active: boolean) => void): void
 	public on(event: "NetDestroy", handler: (id: number) => void): void
 	public on(event: "SetEntityUnitID", handler: (entityId: number, unitId: number) => void): void
 	public on(event: "CreateJammer", handler: (entityId: number, jammerId: string) => void): void
 	public on(event: "DatalinkActorPos", handler: (entityId: number, actorId: number, team: number, identityIndex: number, sensorSource: number, pos: Vector3, vel: Vector3, rwrPrecision: number) => void): void
+	public on(event: "CreateDebugSphere", handler: (id: number) => void): void
+	public on(event: "CreateDebugLine", handler: (id: number) => void): void
+	public on(event: "SyncTOD", handler: () => void): void
 	public on(event: string, handler: (...args: any[]) => void): void {
 		if (!this.listeners[event]) {
 			this.listeners[event] = [];
@@ -535,6 +654,10 @@ export class VTOLLobby {
 		this.onRpc("VTOLLobby", "CloseLobby", this.id, [], this);
 	}
 
+	public ConnectionResult(success: boolean, reason: string) {
+		this.onRpc("VTOLLobby", "ConnectionResult", this.id, [success, reason], this);
+	}
+
 	public SyncLeaveLobby() {
 		this.onRpc("VTOLLobby", "SyncLeaveLobby", this.id, [], this);
 	}
@@ -559,6 +682,7 @@ export class VTOLLobby {
 	public on(event: "UpdateLobbyInfo", handler: (name: string, missionName: string, playerCount: number, maxPlayers: number, isPrivate: boolean, isConnected: boolean, players: RawPlayerInfo[], hostId: string) => void): void
 	public on(event: "UpdateMissionInfo", handler: (name: string, id: string, campaignId: string, workshopId: string, mapId: string, isBuiltin: boolean) => void): void
 	public on(event: "CloseLobby", handler: () => void): void
+	public on(event: "ConnectionResult", handler: (success: boolean, reason: string) => void): void
 	public on(event: "SyncLeaveLobby", handler: () => void): void
 	public on(event: "SyncLobbyRestart", handler: () => void): void
 	public on(event: "LogMessage", handler: (message: string) => void): void
@@ -573,4 +697,4 @@ export class VTOLLobby {
 	}
 }
 
-export type InstancedRpcClass = Client | AIAirVehicle | AIGroundUnit | MissileEntity | GunEntity | HardpointEntity | PlayerVehicle | RadarJammerSync | MessageHandler | VTOLLobby;
+export type InstancedRpcClass = Client | DebugLine | DebugSphere | AIAirVehicle | AIGroundUnit | MissileEntity | GunEntity | HardpointEntity | PlayerVehicle | RadarJammerSync | MessageHandler | VTOLLobby;

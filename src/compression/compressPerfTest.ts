@@ -1,35 +1,14 @@
 import fs from "fs";
+import _ from "lodash";
+
 import { RPCPacket } from "../rpc.js";
+import { VTGRReader } from "../vtgrFileReader.js";
 import { compressRpcPackets } from "./compress.js";
 import { decompressRpcPackets } from "./vtcompression.js";
-import _ from "lodash";
+
 // import { printStats } from "./decompressV5.js";
 
-const fileContent = fs.readFileSync("../../test_rpcs.json", "utf-8");
-const chunkedRpcs: RPCPacket[][] = JSON.parse(fileContent);
-let totalRpcs = 0;
-chunkedRpcs.forEach(chunk => (totalRpcs += chunk.length));
-console.log(`Total RPCs: ${totalRpcs}`);
-
-const compressStart = performance.now();
-const compressedChunks = chunkedRpcs.map(rpcs => compressRpcPackets(rpcs, true));
-const compressDur = performance.now() - compressStart;
-const compressPacketsPerSecond = Math.round(totalRpcs / (compressDur / 1000));
-const compressedBytes = compressedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-console.log(`Compression took ${compressDur.toFixed(0)}ms (${compressPacketsPerSecond.toFixed(0)} pps)`);
-console.log(`Compressed size: ${(compressedBytes / 1024).toFixed(0)}kb, JSON size: ${(fileContent.length / 1024).toFixed(0)}kb`);
-console.log(`Compression ratio: ${(compressedBytes / fileContent.length).toFixed(3)}`);
-
-const decompressStart = performance.now();
-const decompressedChunks = compressedChunks.map(compressed => {
-	const result = decompressRpcPackets(Buffer.from(compressed));
-
-	return result;
-});
-const decompressDur = performance.now() - decompressStart;
-const decompressPacketsPerSecond = Math.round(totalRpcs / (decompressDur / 1000));
-console.log(`Decompression took ${decompressDur.toFixed(0)}ms (${decompressPacketsPerSecond.toFixed(0)} pps)`);
-// printStats();
+// const fileContent = fs.readFileSync("../../test_rpcs.json", "utf-8");
 
 function assert(condition: boolean, message: string) {
 	if (!condition) {
@@ -56,14 +35,54 @@ function compareRpcs(a: RPCPacket, b: RPCPacket) {
 	return result;
 }
 
-chunkedRpcs.forEach((chunk, i) => {
-	chunk.forEach((expectedRpc, j) => {
-		const decompressedRpc = decompressedChunks[i][j];
-		if (!compareRpcs(expectedRpc, decompressedRpc)) {
-			console.log(`Mismatch at index ${i}:`);
-			console.log(`Expected: ${JSON.stringify(expectedRpc)}`);
-			console.log(`Got: ${JSON.stringify(decompressedRpc)}`);
-			process.exit(1);
-		}
+async function loadFile(filepath: string) {
+	const vtgr = new VTGRReader(filepath);
+	await vtgr.open();
+
+	const chunks = await vtgr.parseChunkedAll();
+
+	return chunks;
+}
+
+async function run() {
+	const chunkedRpcs = await loadFile("../../perfinput.vtgr");
+
+	console.log(`Loaded ${chunkedRpcs.length} chunks from VTGR file.`);
+	const jsonSize = chunkedRpcs.reduce((sum, chunk) => sum + JSON.stringify(chunk).length, 0);
+	let totalRpcs = 0;
+	chunkedRpcs.forEach(chunk => (totalRpcs += chunk.length));
+	console.log(`Total RPCs: ${totalRpcs}`);
+
+	const compressStart = performance.now();
+	const compressedChunks = chunkedRpcs.map(rpcs => compressRpcPackets(rpcs, true));
+	const compressDur = performance.now() - compressStart;
+	const compressPacketsPerSecond = Math.round(totalRpcs / (compressDur / 1000));
+	const compressedBytes = compressedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+	console.log(`Compression took ${compressDur.toFixed(0)}ms (${compressPacketsPerSecond.toFixed(0)} pps)`);
+	console.log(`Compressed size: ${(compressedBytes / 1024).toFixed(0)}kb, JSON size: ${(jsonSize / 1024).toFixed(0)}kb`);
+	console.log(`Compression ratio: ${(compressedBytes / jsonSize).toFixed(3)}`);
+
+	const decompressStart = performance.now();
+	const decompressedChunks = compressedChunks.map(compressed => {
+		const result = decompressRpcPackets(Buffer.from(compressed));
+
+		return result;
 	});
-});
+	const decompressDur = performance.now() - decompressStart;
+	const decompressPacketsPerSecond = Math.round(totalRpcs / (decompressDur / 1000));
+	console.log(`Decompression took ${decompressDur.toFixed(0)}ms (${decompressPacketsPerSecond.toFixed(0)} pps)`);
+
+	chunkedRpcs.forEach((chunk, i) => {
+		chunk.forEach((expectedRpc, j) => {
+			const decompressedRpc = decompressedChunks[i][j];
+			if (!compareRpcs(expectedRpc, decompressedRpc)) {
+				console.log(`Mismatch at index ${i}:`);
+				console.log(`Expected: ${JSON.stringify(expectedRpc)}`);
+				console.log(`Got: ${JSON.stringify(decompressedRpc)}`);
+				process.exit(1);
+			}
+		});
+	});
+}
+
+run();

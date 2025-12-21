@@ -1,6 +1,9 @@
+import { Float16Array } from "@petamoriken/float16";
+
 import { RPCPacket } from "../rpc.js";
-import { bitCheck, Index } from "./compress.js";
-import { loadPolyfills } from "./pollyfillLoader.js";
+import { bitCheck } from "./compress.js";
+import { convertToNumber } from "./f16Converter.js";
+import { doesF16Exist, loadPolyfills } from "./pollyfillLoader.js";
 import { debug_decompress } from "./vtcompression.js";
 
 loadPolyfills();
@@ -10,7 +13,8 @@ enum PacketFlags {
 	JSONBody = 0b00000010,
 	IdIsNumber = 0b00000100,
 	HasTimestamp = 0b00001000,
-	ShortStringIndexMode = 0b00010000
+	ShortStringIndexMode = 0b00010000,
+	IdIsUlong = 0b00100000
 }
 
 enum ArgumentType {
@@ -40,14 +44,21 @@ class Reader {
 	private f16Buffer = Buffer.alloc(2);
 	// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 	// @ts-ignore
-	private f16View = new Float16Array(this.f16Buffer.buffer);
-	private f16ByteView = new Uint8Array(this.f16Buffer.buffer);
+	private f16View: Float16Array; //= new Float16Array(this.f16Buffer.buffer);
+	private f16ByteView: Uint8Array; // = new Uint8Array(this.f16Buffer.buffer);
 
 	public get idx() {
 		return this.index;
 	}
 
-	constructor(private buf: Buffer) {}
+	constructor(private buf: Buffer) {
+		if (doesF16Exist()) {
+			this.f16View = new Float16Array(this.f16Buffer.buffer);
+			this.f16ByteView = new Uint8Array(this.f16Buffer.buffer);
+		} else {
+			// console.log(`No Float16Array available, using custom implementation`);
+		}
+	}
 
 	public read(length: number) {
 		const result = this.buf.subarray(this.index, this.index + length);
@@ -72,19 +83,30 @@ class Reader {
 		const upperByte = this.buf.readUInt8(this.index + 1);
 		this.index += 2;
 
-		this.f16ByteView[0] = lowerByte;
-		this.f16ByteView[1] = upperByte;
+		if (this.f16ByteView) {
+			this.f16ByteView[0] = lowerByte;
+			this.f16ByteView[1] = upperByte;
 
-		return this.f16View[0];
+			return this.f16View[0];
+		} else {
+			const bits = (upperByte << 8) | lowerByte;
+			return convertToNumber(bits);
+		}
 	}
 
-	public readI32() {
+	public readU64() {
+		const result = this.buf.readBigUInt64LE(this.index);
+		this.index += 8;
+		return result;
+	}
+
+	public readU32() {
 		const result = this.buf.readUInt32LE(this.index);
 		this.index += 4;
 		return result;
 	}
 
-	public readI16() {
+	public readU16() {
 		const result = this.buf.readUInt16LE(this.index);
 		this.index += 2;
 		return result;
@@ -145,6 +167,8 @@ export function printStats() {
 function decompressFlaggedVector(reader: Reader, result: unknown[]) {
 	const flagFloat16 = 0b01;
 	const flagZero = 0b10;
+	const flagXLong = 0b01000000;
+	const flagZLong = 0b10000000;
 
 	const flags = reader.readByte();
 
@@ -155,10 +179,14 @@ function decompressFlaggedVector(reader: Reader, result: unknown[]) {
 		const compFlag = (flags >> (i * 2)) & 0b11;
 		const isZero = bitCheck(compFlag, flagZero);
 		const isFloat16 = bitCheck(compFlag, flagFloat16);
+		const isLong = (key == "x" && bitCheck(flags, flagXLong)) || (key == "z" && bitCheck(flags, flagZLong));
 
 		if (isZero) return;
+
 		// flaggedVectorStats.numComponents++;
-		if (isFloat16) {
+		if (isLong) {
+			vector[key] = reader.readF64();
+		} else if (isFloat16) {
 			vector[key] = reader.readF16();
 			// flaggedVectorStats.numFloat16++;
 		} else {
@@ -202,16 +230,16 @@ function decompressArgument(reader: Reader, result: unknown[], dynamicArgMap: Re
 			result.push(-reader.readByte());
 			break;
 		case ArgumentType.Short:
-			result.push(reader.readI16());
+			result.push(reader.readU16());
 			break;
 		case ArgumentType.NegativeShort:
-			result.push(-reader.readI16());
+			result.push(-reader.readU16());
 			break;
 		case ArgumentType.Int:
-			result.push(reader.readI32());
+			result.push(reader.readU32());
 			break;
 		case ArgumentType.NegativeInt:
-			result.push(-reader.readI32());
+			result.push(-reader.readU32());
 			break;
 		case ArgumentType.Float:
 			result.push(reader.readF32());
@@ -313,12 +341,13 @@ export function* decompressRpcPacketsV5Gen(bytes: Buffer): Generator<RPCPacket, 
 
 	// RPC Packet format: {classNameIdx} {methodNameIdx} {hasId} {idIdx} {arglen} [arg str]
 	// Read rpc packets
-	const numRpcPackets = reader.readI32();
+	const numRpcPackets = reader.readU32();
 	if (debug_decompress) console.log(`RPC Count: ${numRpcPackets}`);
 	for (let i = 0; i < numRpcPackets; i++) {
 		const packetFlags = reader.readByte();
 		const idIsNum = bitCheck(packetFlags, PacketFlags.IdIsNumber);
 		const hasId = bitCheck(packetFlags, PacketFlags.HasId);
+		const idIsUlong = bitCheck(packetFlags, PacketFlags.IdIsUlong);
 		const hasTimestamp = bitCheck(packetFlags, PacketFlags.HasTimestamp);
 		const shortIndexMode = bitCheck(packetFlags, PacketFlags.ShortStringIndexMode);
 		const isJsonBody = bitCheck(packetFlags, PacketFlags.JSONBody);
@@ -359,7 +388,11 @@ export function* decompressRpcPacketsV5Gen(bytes: Buffer): Generator<RPCPacket, 
 		let id: string | undefined = undefined;
 		if (hasId) {
 			if (idIsNum) {
-				id = reader.decompressInt().toString();
+				if (idIsUlong) {
+					id = reader.readU64().toString();
+				} else {
+					id = reader.decompressInt().toString();
+				}
 			} else {
 				id = getStrFromIdx();
 			}

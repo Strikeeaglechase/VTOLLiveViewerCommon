@@ -1,10 +1,14 @@
 import { RPCPacket } from "../rpc.js";
-import { loadPolyfills } from "./pollyfillLoader.js";
+import { convertToNumber, roundToFloat16Bits } from "./f16Converter.js";
+import { doesF16Exist, loadPolyfills } from "./pollyfillLoader.js";
+import { decompressRpcPackets } from "./vtcompression.js";
 
 loadPolyfills();
 
 const VERSION = 5;
 const vectorAllowedPrecisionLoss = 0.01; // The maximum allowed precision loss for vectors to be compressed as half floats
+const vectorRequiredPrecisionLossForLong = 0.1;
+const validateCompressedData = false;
 
 class Index {
 	private value = 0;
@@ -31,7 +35,8 @@ enum PacketFlags {
 	JSONBody = 0b00000010,
 	IdIsNumber = 0b00000100,
 	HasTimestamp = 0b00001000,
-	ShortStringIndexMode = 0b00010000
+	ShortStringIndexMode = 0b00010000,
+	IdIsUlong = 0b00100000
 }
 
 enum ArgumentType {
@@ -86,32 +91,49 @@ function allArgsCanCompress(args: unknown[]) {
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-const f16 = new Float16Array(1);
-const i16Ui8Arr = new Uint8Array(f16.buffer);
+const f16 = doesF16Exist() ? new Float16Array(1) : null;
+const i16Ui8Arr = f16 ? new Uint8Array(f16.buffer) : null;
 function f16PrecisionLoss(num: number) {
-	f16[0] = num;
-	return Math.abs(f16[0] - num);
+	if (f16) {
+		f16[0] = num;
+		return Math.abs(f16[0] - num);
+	} else {
+		return Math.abs(convertToNumber(roundToFloat16Bits(num)) - num);
+	}
 }
 
 function f16ToBytes(num: number) {
-	f16[0] = num;
+	if (f16) {
+		f16[0] = num;
 
-	if (Math.abs(f16[0] - num) > 0.1) {
-		console.log(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
-		throw new Error(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
+		if (Math.abs(f16[0] - num) > 0.1) {
+			console.log(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
+			// throw new Error(`f16ToBytes called with ${num}, which resulted in a large precision loss: ${f16[0]} (delta: ${f16[0] - num})`);
+		}
+
+		return i16Ui8Arr;
+	} else {
+		const bits = roundToFloat16Bits(num);
+		return [
+			bits & 0x00ff, // Lower byte
+			(bits >> 8) & 0x00ff // Upper byte
+		];
 	}
-
-	return i16Ui8Arr;
 }
 
 const f32 = new Float32Array(1);
 const f32Ui8Arr = new Uint8Array(f32.buffer);
+function f32PrecisionLoss(num: number) {
+	f32[0] = num;
+	return Math.abs(f32[0] - num);
+}
+
 function f32ToBytes(num: number) {
 	f32[0] = num;
 
 	if (Math.abs(f32[0] - num) > 0.1) {
 		console.log(`numToBytes called with ${num}, which resulted in a large precision loss: ${f32[0]} (delta: ${f32[0] - num})`);
-		throw new Error(`numToBytes called with ${num}, which resulted in a large precision loss: ${f32[0]} (delta: ${f32[0] - num})`);
+		// throw new Error(`numToBytes called with ${num}, which resulted in a large precision loss: ${f32[0]} (delta: ${f32[0] - num})`);
 	}
 
 	return f32Ui8Arr;
@@ -131,10 +153,18 @@ function i32ToBytes(num: number) {
 
 	if (i32[0] != num) {
 		console.log(`i32ToBytes called with ${num}, which resulted in a large precision loss: ${i32[0]} (delta: ${i32[0] - num})`);
-		throw new Error(`i32ToBytes called with ${num}, which resulted in a large precision loss: ${i32[0]} (delta: ${i32[0] - num})`);
+		// throw new Error(`i32ToBytes called with ${num}, which resulted in a large precision loss: ${i32[0]} (delta: ${i32[0] - num})`);
 	}
 
 	return i32Ui8Arr;
+}
+
+const u64 = new BigUint64Array(1);
+const u64Ui8Arr = new Uint8Array(u64.buffer);
+function u64ToBytes(num: string | bigint) {
+	u64[0] = BigInt(num);
+
+	return u64Ui8Arr;
 }
 
 function compressString(str: string, result: number[]) {
@@ -152,6 +182,10 @@ function compressString(str: string, result: number[]) {
 }
 
 function compressNumber(num: number, result: number[]) {
+	if (num > Number.MAX_SAFE_INTEGER || num < Number.MIN_SAFE_INTEGER) {
+		console.warn(`compressNumber called with ${num}, which is outside the safe integer range`);
+	}
+
 	if (Math.floor(num) != num) {
 		result.push(ArgumentType.Float);
 		result.append(f32ToBytes(num));
@@ -192,14 +226,19 @@ function compressFlaggedVector(arg: { x: number; y: number; z: number }, result:
 	const zPl = f16PrecisionLoss(arg.z);
 	const canAllBeFloat16 = xPl < vectorAllowedPrecisionLoss && yPl < vectorAllowedPrecisionLoss && zPl < vectorAllowedPrecisionLoss;
 	const canAnyBeFloat16 = xPl < vectorAllowedPrecisionLoss || yPl < vectorAllowedPrecisionLoss || zPl < vectorAllowedPrecisionLoss;
+	const xRequiresLong = f32PrecisionLoss(arg.x) > vectorRequiredPrecisionLossForLong;
+	const zRequiresLong = f32PrecisionLoss(arg.z) > vectorRequiredPrecisionLossForLong;
+	const requiresLong = xRequiresLong || zRequiresLong;
 
 	const flagFloat16 = 0b01;
 	const flagZero = 0b10;
+	const flagXLong = 0b01000000;
+	const flagZLong = 0b10000000;
 
 	const pls = [xPl, yPl, zPl];
 	const components = [arg.x, arg.y, arg.z];
 
-	if (!components.some(c => c === 0)) {
+	if (!requiresLong && !components.some(c => c === 0)) {
 		if (canAllBeFloat16) {
 			result.push(ArgumentType.HalfVector);
 			result.append(f16ToBytes(arg.x)).append(f16ToBytes(arg.y)).append(f16ToBytes(arg.z));
@@ -224,9 +263,15 @@ function compressFlaggedVector(arg: { x: number; y: number; z: number }, result:
 
 		flags |= compFlag << (idx * 2);
 
+		const isXLong = idx == 0 && xRequiresLong;
+		const isZLong = idx == 2 && zRequiresLong;
+		if (isXLong) flags |= flagXLong;
+		if (isZLong) flags |= flagZLong;
+
 		return {
 			value: comp,
 			isFloat16: pl < vectorAllowedPrecisionLoss,
+			isLong: isXLong || isZLong,
 			isZero: comp === 0
 		};
 	});
@@ -235,7 +280,9 @@ function compressFlaggedVector(arg: { x: number; y: number; z: number }, result:
 
 	flaggedComponents.forEach(comp => {
 		if (comp.isZero) return;
-		if (comp.isFloat16) {
+		if (comp.isLong) {
+			result.append(f64ToBytes(comp.value));
+		} else if (comp.isFloat16) {
 			result.append(f16ToBytes(comp.value));
 		} else {
 			result.append(f32ToBytes(comp.value));
@@ -311,8 +358,7 @@ function bhash(value: unknown) {
 
 	if (typeof value == "object") {
 		if ("x" in value && "y" in value && "z" in value) {
-			const v = value as { x: number; y: number; z: number };
-			return v.x + "-" + v.y + "-" + v.z;
+			return value.x + "-" + value.y + "-" + value.z;
 		} else {
 			return JSON.stringify(value);
 		}
@@ -471,6 +517,7 @@ function compressRpcPackets(rpcPacketsWithoutArgInfo: RPCPacket[], includeTimest
 		try {
 			const argCompress = allArgsCanCompress(packet.args);
 			const idIsNum = isNum(packet.id);
+			const idIsUlong = idIsNum && BigInt(packet.id) > Number.MAX_SAFE_INTEGER;
 			const classNameIdx = stringsMap[packet.className.toString()];
 			const methodIdx = stringsMap[packet.method.toString()];
 			const shortIndexMode = classNameIdx < 16 && methodIdx < 16;
@@ -482,6 +529,7 @@ function compressRpcPackets(rpcPacketsWithoutArgInfo: RPCPacket[], includeTimest
 			if (packet.id) packetFlags |= PacketFlags.HasId;
 			if (packet.timestamp != undefined && includeTimestamps) packetFlags |= PacketFlags.HasTimestamp;
 			if (shortIndexMode) packetFlags |= PacketFlags.ShortStringIndexMode;
+			if (idIsUlong) packetFlags |= PacketFlags.IdIsUlong;
 
 			result.push(packetFlags);
 
@@ -495,7 +543,11 @@ function compressRpcPackets(rpcPacketsWithoutArgInfo: RPCPacket[], includeTimest
 
 			if (packet.id) {
 				if (idIsNum) {
-					compressIntAndPush(parseInt(packet.id.toString()));
+					if (idIsUlong) {
+						result.append(u64ToBytes(packet.id));
+					} else {
+						compressIntAndPush(parseInt(packet.id.toString()));
+					}
 				} else {
 					pushStrIdx(packet.id.toString());
 				}
@@ -530,6 +582,18 @@ function compressRpcPackets(rpcPacketsWithoutArgInfo: RPCPacket[], includeTimest
 	// metrics.argSize += argSize;
 	// metrics.argTotal += argTotal;
 	// metrics.rpcsTotal += rpcPackets.length;
+
+	if (validateCompressedData) {
+		const decompressed = decompressRpcPackets(Buffer.from(result));
+		decompressed.forEach((decompressedPacket, idx) => {
+			const originalPacket = rpcPackets[idx];
+			if (!originalPacket.id) return;
+			if (originalPacket.id != decompressedPacket.id) {
+				console.log({ orgId: originalPacket.id, decompId: decompressedPacket.id, idx, originalPacket, decompressedPacket });
+				throw new Error(`Decompressed packet id does not match original packet id at index ${idx}: ${originalPacket.id} != ${decompressedPacket.id}`);
+			}
+		});
+	}
 
 	return result;
 }
