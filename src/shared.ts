@@ -144,7 +144,7 @@ export interface VTGRHeader {
 	info: RecordedLobbyInfo;
 	id: string;
 	includesMission: boolean;
-	isConvertedVtr: boolean;
+	isConvertedVtr?: boolean;
 	chunks: VTGRDataChunk[];
 }
 
@@ -166,7 +166,9 @@ export enum LobbyReadyState {
 }
 
 @EnableRPCs("instance", ["NuclearOptionLobby"])
-export class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log_message" | "mission_info" | "connection_result" | "lobby_ready_state"> {
+export class VTOLLobby extends EventEmitter<
+	"lobby_end" | "lobby_restart" | "log_message" | "mission_info" | "connection_result" | "lobby_ready_state" | "radar_data_report"
+> {
 	public name = "";
 	public missionName = "";
 	public playerCount = 0;
@@ -260,6 +262,11 @@ export class VTOLLobby extends EventEmitter<"lobby_end" | "lobby_restart" | "log
 	@RPC("in")
 	isRecording(isRecording: boolean) {
 		this.activelyRecording = isRecording;
+	}
+
+	@RPC("in")
+	RadarDataReport(report: { data: string }) {
+		this.emit("radar_data_report", report.data);
 	}
 
 	public async waitForConnectionResult(): Promise<LobbyConnectionResult> {
