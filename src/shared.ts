@@ -167,7 +167,7 @@ export enum LobbyReadyState {
 
 @EnableRPCs("instance", ["NuclearOptionLobby"])
 export class VTOLLobby extends EventEmitter<
-	"lobby_end" | "lobby_restart" | "log_message" | "mission_info" | "connection_result" | "lobby_ready_state" | "radar_data_report"
+	"lobby_end" | "lobby_restart" | "log_message" | "mission_info" | "connection_result" | "lobby_ready_state" | "radar_data_report" | "ir_data_report"
 > {
 	public name = "";
 	public missionName = "";
@@ -267,6 +267,11 @@ export class VTOLLobby extends EventEmitter<
 	@RPC("in")
 	RadarDataReport(report: { data: string }) {
 		this.emit("radar_data_report", report.data);
+	}
+
+	@RPC("in")
+	IRDataReport(report: { data: string }) {
+		this.emit("ir_data_report", report.data);
 	}
 
 	public async waitForConnectionResult(): Promise<LobbyConnectionResult> {
