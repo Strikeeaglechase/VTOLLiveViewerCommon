@@ -155,6 +155,7 @@ export interface VTGRMetadata {
 
 	netInstantiates: number;
 	totalPackets: number;
+	containsSupplementalSensorData: boolean;
 
 	version: string;
 	errored: boolean;
