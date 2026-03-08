@@ -328,6 +328,10 @@ export interface DbUserEntry {
 	authHistory: { type: AuthType; time: number; ip: string }[];
 }
 
+export interface HCAutoJoinToken {
+	steamId: string;
+}
+
 export interface RecordedLobbyPacket {
 	id: string;
 	lobbyId: string;
